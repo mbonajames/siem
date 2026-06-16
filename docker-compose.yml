@@ -15,7 +15,6 @@ services:
     container_name: siem-ui
     restart: unless-stopped
     ports:
-      - "80:80"
       - "8443:8443"
     volumes:
       - ./docker/certs:/etc/nginx/certs:ro
