@@ -1,0 +1,230 @@
+.dv-container { display: flex; flex-direction: column; gap: 14px; }
+
+// ── Toolbar ───────────────────────────────────────────────────────────────────
+.dv-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--siem-surface); border: 1px solid var(--siem-border);
+  border-radius: 8px; padding: 10px 14px;
+}
+
+.dv-back {
+  display: inline-flex; align-items: center; color: var(--siem-text-secondary);
+  text-decoration: none; transition: color .15s; flex-shrink: 0;
+  mat-icon { font-size: 20px; width: 20px; height: 20px; }
+  &:hover { color: var(--siem-text-primary); }
+}
+
+.dv-title {
+  font-size: 16px; font-weight: 700; color: var(--siem-text-primary);
+  margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.dv-name-input {
+  flex: 1; background: var(--siem-surface-elevated); border: 1px solid var(--siem-border);
+  border-radius: 6px; padding: 5px 10px; color: var(--siem-text-primary);
+  font-size: 15px; font-weight: 700; font-family: inherit;
+  &:focus { outline: none; border-color: #58a6ff; }
+}
+
+.dv-shared-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: rgba(63,185,80,.12); color: #3fb950;
+  border: 1px solid rgba(63,185,80,.25);
+  mat-icon { font-size: 11px; width: 11px; height: 11px; }
+}
+
+.dv-toolbar-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+
+.dv-time-range {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  color: var(--siem-text-secondary); font-size: 12px;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; }
+}
+
+.dv-hours-select {
+  font-size: 12px; font-family: inherit; padding: 4px 10px; border-radius: 5px;
+  background: var(--siem-surface-elevated); border: 1px solid var(--siem-border);
+  color: var(--siem-text-primary); cursor: pointer;
+  &:focus { outline: none; border-color: #58a6ff; }
+}
+
+.dv-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer; border: 1px solid var(--siem-border);
+  background: var(--siem-surface-elevated); color: var(--siem-text-primary);
+  transition: all .15s;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; }
+  &:hover { border-color: #58a6ff; color: #58a6ff; }
+  &.active { background: rgba(63,185,80,.12); border-color: #3fb950; color: #3fb950; }
+  &.dv-btn-primary { background: #58a6ff; border-color: #58a6ff; color: #fff; &:hover { background: #79c0ff; } }
+  &.dv-btn-save    { background: #3fb950; border-color: #3fb950; color: #fff; &:hover { background: #56d364; } }
+  &.dv-btn-ghost   { background: none; color: var(--siem-text-secondary); &:hover { color: var(--siem-text-primary); } }
+  &:disabled       { opacity: .5; cursor: not-allowed; }
+}
+
+.spin { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+// ── Catalog panel ─────────────────────────────────────────────────────────────
+.dv-catalog {
+  background: var(--siem-surface); border: 1px solid var(--siem-border);
+  border-radius: 8px; padding: 14px;
+}
+
+.dv-catalog-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 600; color: var(--siem-text-primary);
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--siem-border);
+}
+
+.wgt-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: none; background: none; border-radius: 4px;
+  color: var(--siem-text-secondary); cursor: pointer;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  &:hover { background: var(--siem-surface-elevated); color: var(--siem-text-primary); }
+}
+
+.dv-catalog-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;
+}
+
+.dv-catalog-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 10px 12px; border-radius: 6px; border: 1px solid var(--siem-border);
+  background: var(--siem-surface-elevated); cursor: pointer; text-align: left;
+  font-family: inherit; transition: border-color .15s, box-shadow .15s;
+  &:hover { border-color: #58a6ff; box-shadow: 0 1px 6px rgba(88,166,255,.2); }
+}
+
+.ci-icon { font-size: 20px; width: 20px; height: 20px; color: #58a6ff; margin-bottom: 2px; }
+.ci-label { font-size: 13px; font-weight: 600; color: var(--siem-text-primary); }
+.ci-desc  { font-size: 11px; color: var(--siem-text-secondary); line-height: 1.4; }
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+.dv-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 60px 20px; color: var(--siem-text-secondary);
+  mat-icon { font-size: 40px; width: 40px; height: 40px; opacity: .4; }
+  p { font-size: 14px; margin: 0; }
+}
+
+// ── Widget grid ───────────────────────────────────────────────────────────────
+.dv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: auto; // rows size to content; normal widgets set their own height
+  gap: 14px;
+
+  @media (max-width: 1200px) { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 768px)  { grid-template-columns: 1fr; }
+}
+
+.dv-widget-wrap {
+  display: flex; flex-direction: column; gap: 6px;
+  min-height: 0;
+  position: relative; // for the absolute-positioned resize handle
+
+  app-widget { flex: 1; min-height: 0; }
+
+  &.w-quarter       { grid-column: span 1; }
+  &.w-half          { grid-column: span 2; }
+  &.w-three-quarter { grid-column: span 3; }
+  &.w-full          { grid-column: span 4; }
+
+  // Dividers and text blocks size to their content
+  &.w-auto {
+    height: auto;
+    min-height: 0;
+    app-widget { flex: none; }
+  }
+}
+
+// ── Drag-to-resize handle ─────────────────────────────────────────────────────
+.dv-resize-handle {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 14px;
+  cursor: s-resize;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity .2s;
+  z-index: 5;
+
+  // Two-line grip indicator
+  &::after {
+    content: '';
+    display: block;
+    width: 36px; height: 2px;
+    border-radius: 2px;
+    background: var(--siem-text-secondary);
+    box-shadow: 0 -4px 0 var(--siem-text-secondary);
+  }
+}
+
+.dv-widget-wrap:hover .dv-resize-handle { opacity: 0.45; }
+.dv-resize-handle:hover                 { opacity: 1 !important; }
+
+// CDK drag styling
+.cdk-drag-preview {
+  border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.5); opacity: .9;
+}
+.cdk-drag-animating { transition: transform 250ms ease; }
+.dv-grid.cdk-drop-list-dragging .dv-widget-wrap:not(.cdk-drag-placeholder) { transition: transform 250ms ease; }
+
+.dv-drag-placeholder {
+  border: 2px dashed var(--siem-border); border-radius: 8px;
+  background: rgba(88,166,255,.05);
+}
+
+// ── Per-widget edit controls ──────────────────────────────────────────────────
+.dv-widget-controls {
+  display: flex; gap: 6px; align-items: center; width: 100%;
+}
+
+.wgt-title-input {
+  flex: 1; font-size: 11px; font-family: inherit; padding: 2px 8px; border-radius: 4px;
+  background: var(--siem-surface-elevated); border: 1px solid var(--siem-border);
+  color: var(--siem-text-primary); min-width: 0;
+  &:focus { outline: none; border-color: #58a6ff; }
+  &::placeholder { color: var(--siem-text-secondary); }
+}
+
+.wgt-mini-select {
+  font-size: 11px; font-family: inherit; padding: 2px 6px; border-radius: 4px;
+  background: var(--siem-surface-elevated); border: 1px solid var(--siem-border);
+  color: var(--siem-text-secondary); cursor: pointer; flex-shrink: 0;
+  &:focus { outline: none; border-color: #58a6ff; }
+}
+
+// ── Print / PDF export ────────────────────────────────────────────────────────
+// Scoped to body.siem-print-dashboard so Ctrl+P from the browser doesn't
+// accidentally reformat the page.
+// Note: Angular view-encapsulation is bypassed here via :host — these rules
+// still apply only to this component's DOM.
+@media print {
+  :host-context(body.siem-print-dashboard) {
+    .dv-toolbar, .dv-catalog, .dv-widget-controls { display: none !important; }
+
+    .dv-container { gap: 10px; }
+
+    .dv-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 10px;
+    }
+
+    .dv-widget-wrap {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      height: 260px !important;
+      &.w-auto { height: auto !important; }
+      &.w-full, &.w-three-quarter { grid-column: span 2; }
+    }
+
+    .widget-header .widget-actions { display: none !important; }
+    .widget-body { overflow: visible !important; }
+    .wgt-alert-feed, .wgt-ioc-feed { overflow: visible !important; max-height: none; }
+  }
+}

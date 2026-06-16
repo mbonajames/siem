@@ -1,0 +1,119 @@
+<div class="vuln-container">
+  <div class="page-header">
+    <h1><mat-icon>bug_report</mat-icon> Vulnerability Management</h1>
+    <button mat-stroked-button (click)="loadVulnerabilities()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  <div class="stats-grid">
+    <app-stat-card label="Critical" [value]="stats.critical" icon="gpp_bad" severity="critical" />
+    <app-stat-card label="High" [value]="stats.high" icon="gpp_bad" severity="high" />
+    <app-stat-card label="Medium" [value]="stats.medium" icon="warning" severity="medium" />
+    <app-stat-card label="Low" [value]="stats.low" icon="info" severity="low" />
+    <app-stat-card label="Secure Score" [value]="secureScore" icon="shield" severity="info" />
+  </div>
+
+  @if (loading) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+  <mat-tab-group>
+    <mat-tab [label]="'MS Defender (' + defenderAlerts.length + ')'">
+      <div class="tab-content">
+        <div class="data-table-container">
+          <table mat-table [dataSource]="defenderDataSource" matSort>
+            <ng-container matColumnDef="title">
+              <th mat-header-cell *matHeaderCellDef>Title</th>
+              <td mat-cell *matCellDef="let row" class="title-cell">{{ row.title }}</td>
+            </ng-container>
+            <ng-container matColumnDef="severity">
+              <th mat-header-cell *matHeaderCellDef>Severity</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge ' + getSeverityClass(row.severity)">{{ row.severity }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let row">{{ row.status }}</td>
+            </ng-container>
+            <ng-container matColumnDef="category">
+              <th mat-header-cell *matHeaderCellDef>Category</th>
+              <td mat-cell *matCellDef="let row">{{ row.category }}</td>
+            </ng-container>
+            <ng-container matColumnDef="created">
+              <th mat-header-cell *matHeaderCellDef>Created</th>
+              <td mat-cell *matCellDef="let row">{{ row.createdDateTime | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Actions</th>
+              <td mat-cell *matCellDef="let row">
+                <button mat-icon-button [matMenuTriggerFor]="menu">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #menu="matMenu">
+                  <button mat-menu-item (click)="createTicket(row)">
+                    <mat-icon>add_task</mat-icon> Create Jira Ticket
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="displayedColumnsDefender"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumnsDefender;"></tr>
+          </table>
+          <mat-paginator [pageSizeOptions]="[25, 50]" showFirstLastButtons></mat-paginator>
+        </div>
+      </div>
+    </mat-tab>
+
+    <mat-tab [label]="'Sophos (' + sophosAlerts.length + ')'">
+      <div class="tab-content">
+        <div class="data-table-container">
+          <table mat-table [dataSource]="sophosDataSource">
+            <ng-container matColumnDef="description">
+              <th mat-header-cell *matHeaderCellDef>Description</th>
+              <td mat-cell *matCellDef="let row" class="title-cell">{{ row.description }}</td>
+            </ng-container>
+            <ng-container matColumnDef="severity">
+              <th mat-header-cell *matHeaderCellDef>Severity</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge ' + getSeverityClass(row.severity)">{{ row.severity }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="type">
+              <th mat-header-cell *matHeaderCellDef>Type</th>
+              <td mat-cell *matCellDef="let row">{{ row.type }}</td>
+            </ng-container>
+            <ng-container matColumnDef="raisedAt">
+              <th mat-header-cell *matHeaderCellDef>Raised At</th>
+              <td mat-cell *matCellDef="let row">{{ row.raisedAt | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="['description','severity','type','raisedAt']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['description','severity','type','raisedAt'];"></tr>
+          </table>
+        </div>
+      </div>
+    </mat-tab>
+
+    <mat-tab [label]="'Darktrace (' + darktraceAlerts.length + ')'">
+      <div class="tab-content">
+        <div class="data-table-container">
+          <table mat-table [dataSource]="darktraceDataSource">
+            <ng-container matColumnDef="title">
+              <th mat-header-cell *matHeaderCellDef>Alert</th>
+              <td mat-cell *matCellDef="let row" class="title-cell">{{ row.title || row.message }}</td>
+            </ng-container>
+            <ng-container matColumnDef="score">
+              <th mat-header-cell *matHeaderCellDef>Score</th>
+              <td mat-cell *matCellDef="let row">{{ row.score | number:'1.0-2' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="time">
+              <th mat-header-cell *matHeaderCellDef>Time</th>
+              <td mat-cell *matCellDef="let row">{{ row.time | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="['title','score','time']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['title','score','time'];"></tr>
+          </table>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

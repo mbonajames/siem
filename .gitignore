@@ -1,0 +1,23 @@
+# ── Secrets — NEVER commit these ──────────────────────────────────────────────
+APIGateway/.env
+
+# ── SSL certificates ──────────────────────────────────────────────────────────
+docker/certs/siem.crt
+docker/certs/siem.key
+
+# ── Python ────────────────────────────────────────────────────────────────────
+APIGateway/fastvenv/
+APIGateway/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# ── Node / Angular ────────────────────────────────────────────────────────────
+siem-dashboard/node_modules/
+siem-dashboard/dist/
+siem-dashboard/.angular/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json

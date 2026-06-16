@@ -1,0 +1,146 @@
+<div class="settings-container">
+  <div class="page-header">
+    <h1><mat-icon>settings</mat-icon> Integration Settings</h1>
+    <span class="config-summary">
+      {{ configuredCount() }} / {{ integrations.length }} integrations configured
+    </span>
+  </div>
+
+  @if (loading) {
+    <div class="loading-state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading configuration...</p>
+    </div>
+  }
+
+  <div class="integrations-grid">
+    @for (state of integrations; track state.key) {
+      <mat-card class="integration-card" [class.is-configured]="state.config.configured">
+        <mat-card-content>
+
+          <!-- Card header -->
+          <div class="card-header">
+            <div class="card-title-row">
+              <mat-icon class="integration-icon" [class.configured-icon]="state.config.configured">
+                {{ state.config.icon }}
+              </mat-icon>
+              <div>
+                <div class="integration-name">{{ state.config.label }}</div>
+                <div class="integration-desc">{{ state.config.description }}</div>
+              </div>
+            </div>
+            <span [class]="state.config.configured ? 'badge low' : 'badge status-disconnected'">
+              <mat-icon>{{ state.config.configured ? 'check_circle' : 'cancel' }}</mat-icon>
+              {{ state.config.configured ? 'Configured' : 'Not configured' }}
+            </span>
+          </div>
+
+          <mat-divider></mat-divider>
+
+          <!-- Test connection row -->
+          <div class="test-row">
+            <button
+              mat-stroked-button
+              [disabled]="!state.config.configured || state.testStatus === 'testing'"
+              (click)="testConnection(state)"
+            >
+              @if (state.testStatus === 'testing') {
+                <mat-spinner diameter="16"></mat-spinner>
+              } @else {
+                <mat-icon>wifi_tethering</mat-icon>
+              }
+              Test Connection
+            </button>
+
+            @if (state.testStatus === 'connected') {
+              <span class="test-result connected">
+                <mat-icon>check_circle</mat-icon> {{ state.testMessage }}
+              </span>
+            }
+            @if (state.testStatus === 'error') {
+              <span class="test-result error" [matTooltip]="state.testMessage">
+                <mat-icon>error</mat-icon> Connection failed
+              </span>
+            }
+          </div>
+
+          <!-- Credential editor (expansion) -->
+          <mat-expansion-panel
+            [(expanded)]="state.expanded"
+            class="cred-panel"
+            hideToggle
+          >
+            <mat-expansion-panel-header (click)="state.expanded = !state.expanded">
+              <mat-panel-title>
+                <mat-icon>{{ state.expanded ? 'expand_less' : 'edit' }}</mat-icon>
+                {{ state.expanded ? 'Collapse' : 'Edit Credentials' }}
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+
+            <div class="cred-form">
+              @for (key of fieldKeys(state); track key) {
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>{{ state.config.fields[key].label }}</mat-label>
+                  <input
+                    matInput
+                    [type]="getInputType(state, key)"
+                    [(ngModel)]="state.formData[key]"
+                    [placeholder]="state.config.fields[key].type === 'password' && state.config.fields[key].configured ? '••••••••' : ''"
+                    autocomplete="off"
+                  >
+                  @if (state.config.fields[key].type === 'password') {
+                    <button
+                      matSuffix
+                      mat-icon-button
+                      type="button"
+                      (click)="toggleSecret(state, key)"
+                      [matTooltip]="state.showSecrets[key] ? 'Hide' : 'Show'"
+                    >
+                      <mat-icon>{{ state.showSecrets[key] ? 'visibility_off' : 'visibility' }}</mat-icon>
+                    </button>
+                  }
+                  @if (state.config.fields[key].configured && state.config.fields[key].type !== 'password') {
+                    <mat-icon matSuffix class="field-ok">check_circle</mat-icon>
+                  }
+                </mat-form-field>
+              }
+
+              <div class="cred-actions">
+                <button mat-flat-button color="primary" (click)="save(state)" [disabled]="state.saving">
+                  @if (state.saving) {
+                    <mat-spinner diameter="16"></mat-spinner>
+                  } @else {
+                    <mat-icon>save</mat-icon>
+                  }
+                  Save
+                </button>
+                <button mat-button (click)="state.expanded = false">Cancel</button>
+              </div>
+            </div>
+          </mat-expansion-panel>
+
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+
+  <!-- Azure AD note -->
+  <mat-card class="azure-note-card">
+    <mat-card-content>
+      <div class="azure-note-header">
+        <mat-icon>manage_accounts</mat-icon>
+        <div>
+          <div class="integration-name">Azure AD / MSAL SSO</div>
+          <div class="integration-desc">Frontend app registration for single sign-on</div>
+        </div>
+        <span class="badge info">Compiled into app</span>
+      </div>
+      <p class="note-text">
+        SSO credentials are set in
+        <code>siem-dashboard/src/environments/environment.ts</code>
+        and compiled into the application. To update them, edit that file and rebuild.
+      </p>
+      <code class="env-snippet">msal: &#123; clientId: '...', tenantId: '...' &#125;</code>
+    </mat-card-content>
+  </mat-card>
+</div>

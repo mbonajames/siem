@@ -1,0 +1,18 @@
+{
+  "name": "siem",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently --names \"DJANGO,ANGULAR\" --prefix-colors \"cyan,green\" \"npm run backend\" \"npm run frontend\"",
+    "backend": "siem-backend-py\\.venv\\Scripts\\python.exe siem-backend-py\\manage.py runserver 8000",
+    "frontend": "npm start --prefix siem-dashboard"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

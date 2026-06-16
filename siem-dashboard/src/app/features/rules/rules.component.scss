@@ -1,0 +1,12 @@
+.rules-container { max-width: 1400px; }
+.page-header h1 { display: flex; align-items: center; gap: 8px; }
+.tab-content { padding-top: 20px; }
+.desc-cell { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filename { font-size: 11px; color: var(--siem-text-secondary); font-family: monospace; }
+.group-chip { font-size: 10px !important; height: 20px !important; min-height: 20px !important; padding: 0 8px !important; }
+.mitre-chip {
+  display: inline-block; margin-right: 3px;
+  padding: 1px 6px; border-radius: 4px; font-size: 11px; font-family: monospace;
+  background: rgba(127,119,221,.12); color: #7F77DD; border: 1px solid rgba(127,119,221,.25);
+}
+code { background: var(--siem-surface-elevated); padding: 2px 6px; border-radius: 4px; font-size: 12px; border: 1px solid var(--siem-border); color: var(--siem-info); }

@@ -1,0 +1,335 @@
+<div class="nessus-page">
+
+  <!-- Header bar -->
+  <div class="page-header">
+    <div class="header-left">
+      <mat-icon class="header-icon">radar</mat-icon>
+      <div>
+        <div class="page-title">Vulnerability Management</div>
+        <div class="page-sub">Browse Nessus folders, review scan findings, and export reports</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-refresh" (click)="load()">
+        <mat-icon>refresh</mat-icon> Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Stat tiles -->
+  <div class="stat-tiles">
+    <div class="stat-tile">
+      <div class="tile-label">Total Scans</div>
+      <div class="tile-val orange">{{ stats.total }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="tile-label">Running</div>
+      <div class="tile-val info">{{ stats.running }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="tile-label">Completed</div>
+      <div class="tile-val ok">{{ stats.completed }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="tile-label">Folders</div>
+      <div class="tile-val warn">{{ stats.folders }}</div>
+    </div>
+  </div>
+
+  <!-- Vulnerability overview card -->
+  <div class="vuln-summary-card">
+    <div class="vs-header">
+      <div class="vs-title">
+        <mat-icon class="vs-icon">bug_report</mat-icon>
+        Vulnerabilities Overview
+      </div>
+      @if (selectedScan) {
+        <span class="vs-scan-name">{{ selectedScan.info.name }}</span>
+        <span class="vs-total">{{ vulnStats.total }} total</span>
+      } @else {
+        <span class="vs-hint">Select a scan to populate</span>
+      }
+    </div>
+
+    <div class="vs-buckets">
+      @for (bucket of [
+        {key:'critical',label:'Critical',val:vulnStats.critical,pct:vulnStats.critPct,cls:'crit'},
+        {key:'high',    label:'High',    val:vulnStats.high,    pct:vulnStats.highPct,cls:'high'},
+        {key:'medium',  label:'Medium',  val:vulnStats.medium,  pct:vulnStats.medPct, cls:'med'},
+        {key:'low',     label:'Low',     val:vulnStats.low,     pct:vulnStats.lowPct, cls:'low'},
+        {key:'info',    label:'Info',    val:vulnStats.info,    pct:vulnStats.infoPct,cls:'info-val'}
+      ]; track bucket.key) {
+        @if ($index > 0) { <div class="vs-divider"></div> }
+        <div class="vs-bucket" [class.active]="vulnFilter === bucket.key"
+             (click)="vulnFilter = $any(bucket.key)">
+          <div class="vs-sev-label" [class]="bucket.cls + '-label'">{{ bucket.label }}</div>
+          <div class="vs-count" [class]="bucket.cls">{{ selectedScan ? bucket.val : '—' }}</div>
+          <div class="vs-bar-track">
+            <div class="vs-bar-fill" [class]="bucket.cls + '-fill'"
+                 [style.width.%]="selectedScan ? bucket.pct : 0"></div>
+          </div>
+          <div class="vs-pct">{{ selectedScan ? bucket.pct + '%' : '' }}</div>
+        </div>
+      }
+    </div>
+
+    @if (selectedScan && vulnStats.total > 0) {
+      <div class="vs-proportion-bar">
+        @if (vulnStats.critPct) { <div class="vp-seg crit-fill"  [style.flex]="vulnStats.critPct"></div> }
+        @if (vulnStats.highPct) { <div class="vp-seg high-fill"  [style.flex]="vulnStats.highPct"></div> }
+        @if (vulnStats.medPct)  { <div class="vp-seg med-fill"   [style.flex]="vulnStats.medPct"></div>  }
+        @if (vulnStats.lowPct)  { <div class="vp-seg low-fill"   [style.flex]="vulnStats.lowPct"></div>  }
+        @if (vulnStats.infoPct) { <div class="vp-seg info-fill"  [style.flex]="vulnStats.infoPct"></div> }
+      </div>
+    }
+
+    @if (vulnFilter !== 'all') {
+      <button class="vs-reset" (click)="vulnFilter = 'all'">
+        <mat-icon>filter_list_off</mat-icon> Show all
+      </button>
+    }
+  </div>
+
+  <!-- Top row: Folders (left) + Scans (right) -->
+  <div class="top-panels">
+
+    <!-- Folders column -->
+    <div class="card folders-card">
+      <div class="card-head">
+        <span>Folders</span>
+        @if (loading) { <span class="loading-dot"></span> }
+      </div>
+
+      @if (folders.length === 0 && !loading) {
+        <div class="empty-state">
+          <mat-icon>folder_open</mat-icon>
+          <span>No folders found</span>
+        </div>
+      }
+
+      <div class="folder-list">
+        @for (folder of folders; track folder.id) {
+          <button class="folder-item" [class.active]="selectedFolder?.id === folder.id"
+                  (click)="selectFolder(folder)">
+            <mat-icon class="folder-icon">
+              {{ folder.type === 'trash' ? 'delete_outline' : 'folder_open' }}
+            </mat-icon>
+            <span class="folder-item-name">{{ folder.name }}</span>
+            <span class="folder-item-badge">{{ folder.scans.length }}</span>
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- Scans column -->
+    <div class="card scans-card">
+      <div class="card-head">
+        @if (selectedFolder) {
+          <span>{{ selectedFolder.name }}</span>
+          <span class="scans-count-label">
+            {{ selectedFolder.scans.length }} scan{{ selectedFolder.scans.length !== 1 ? 's' : '' }}
+          </span>
+        } @else {
+          <span>Scans</span>
+        }
+      </div>
+
+      @if (!selectedFolder && !loading) {
+        <div class="empty-state">
+          <mat-icon>folder_open</mat-icon>
+          <span>Select a folder to view its scans</span>
+        </div>
+      }
+
+      @if (selectedFolder && selectedFolder.scans.length === 0) {
+        <div class="empty-state">
+          <mat-icon>radar</mat-icon>
+          <span>No scans in this folder</span>
+        </div>
+      }
+
+      @if (selectedFolder) {
+        <div class="scan-list">
+          @for (scan of selectedFolder.scans; track scan.id) {
+            <div class="scan-row" [class.active]="selectedScanId === scan.id"
+                 (click)="loadDetail(scan.id)">
+              <div class="scan-row-main">
+                <span class="scan-name">{{ scan.name }}</span>
+                <span class="scan-status" [ngClass]="getStatusClass(scan.status)">{{ scan.status }}</span>
+              </div>
+              <div class="scan-row-sub">
+                <span class="scan-date">{{ formatDate(scan.last_modification_date) }}</span>
+                @if (isRunning(scan)) {
+                  <span class="running-spinner"><mat-icon class="spin">autorenew</mat-icon></span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+  </div>
+
+  <!-- Detail panel — full width below -->
+  <div class="card detail-card">
+    @if (!selectedScan && !detailLoading) {
+      <div class="empty-state">
+        <mat-icon>manage_search</mat-icon>
+        <span>Select a scan to view vulnerability details</span>
+      </div>
+    }
+    @if (detailLoading) {
+      <div class="empty-state">
+        <span class="loading-dot large"></span>
+        <span>Loading scan details…</span>
+      </div>
+    }
+    @if (selectedScan && !detailLoading) {
+
+      <!-- Detail header -->
+      <div class="detail-header">
+        <div class="detail-title-row">
+          <span class="detail-title">{{ selectedScan.info.name }}</span>
+          <span class="scan-status" [ngClass]="getStatusClass(selectedScan.info.status)">
+            {{ selectedScan.info.status }}
+          </span>
+          @if (selectedHistoryId) {
+            <span class="hist-viewing-badge">
+              <mat-icon>history</mat-icon> Historical run · {{ formatDate(selectedScan.info.scan_start) }}
+            </span>
+          }
+          <div class="detail-header-actions">
+            <select class="export-fmt-select" [(ngModel)]="exportFormat">
+              <option value="csv">CSV</option>
+              <option value="html">HTML</option>
+              <option value="nessus">Nessus XML</option>
+            </select>
+            <button class="btn-export" (click)="exportScan($event)" [disabled]="exporting">
+              <mat-icon>{{ exporting ? 'hourglass_top' : 'download' }}</mat-icon>
+              {{ exporting ? 'Exporting…' : 'Export' }}
+            </button>
+            <button class="btn-hist" (click)="showHistory = !showHistory"
+                    [class.active]="showHistory" title="Scan history">
+              <mat-icon>history</mat-icon>
+            </button>
+          </div>
+          <button class="btn-close" (click)="closeDetail()"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="detail-meta">
+          <span><mat-icon class="meta-icon">computer</mat-icon> {{ selectedScan.info.targets }}</span>
+          <span><mat-icon class="meta-icon">schedule</mat-icon> {{ formatDate(selectedScan.info.scan_start) }}</span>
+          <span><mat-icon class="meta-icon">check_circle</mat-icon> {{ formatDate(selectedScan.info.scan_end) }}</span>
+        </div>
+      </div>
+
+      <!-- Scan history -->
+      @if (showHistory && selectedScan.history.length) {
+        <div class="history-section">
+          <div class="history-section-head">
+            <span class="section-label">Scan History ({{ selectedScan.history.length }})</span>
+            @if (selectedHistoryId) {
+              <button class="btn-latest" (click)="loadDetail(selectedScanId!)">
+                <mat-icon>update</mat-icon> Back to latest
+              </button>
+            }
+          </div>
+          <div class="history-list">
+            @for (h of selectedScan.history; track h.history_id) {
+              <div class="history-row" [class.active]="selectedHistoryId === h.history_id"
+                   (click)="loadHistory(h)">
+                <mat-icon class="hist-sel-icon">
+                  {{ selectedHistoryId === h.history_id ? 'radio_button_checked' : 'radio_button_unchecked' }}
+                </mat-icon>
+                <span class="scan-status" [ngClass]="getStatusClass(h.status)">{{ h.status }}</span>
+                <span class="hist-date">{{ formatDate(h.creation_date) }}</span>
+                <span class="hist-end">→ {{ formatDate(h.last_modification_date) }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Host summary -->
+      @if (selectedScan.hosts.length > 0) {
+        <div class="section-label">Hosts ({{ selectedScan.hosts.length }})</div>
+        <div class="host-strip">
+          @for (host of selectedScan.hosts; track host.host_id) {
+            <div class="host-chip">
+              <div class="host-name">{{ host.hostname }}</div>
+              <div class="host-counts">
+                @if (host.critical) { <span class="hc crit">{{ host.critical }}C</span> }
+                @if (host.high)     { <span class="hc high">{{ host.high }}H</span> }
+                @if (host.medium)   { <span class="hc med">{{ host.medium }}M</span> }
+                @if (host.low)      { <span class="hc low">{{ host.low }}L</span> }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Vulnerability filter + table -->
+      <div class="vuln-filter-bar">
+        <span class="section-label">Vulnerabilities ({{ selectedScan.vulnerabilities.length }})</span>
+        <div class="filter-pills">
+          @for (f of ['all','critical','high','medium','low','info']; track f) {
+            <button class="filter-pill" [class.active]="vulnFilter === f"
+                    (click)="vulnFilter = $any(f)">{{ f }}</button>
+          }
+        </div>
+      </div>
+
+      <div class="vuln-table-wrap">
+        <table class="vuln-table">
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Plugin</th>
+              <th>Vulnerability</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (v of filteredVulns; track v.plugin_id) {
+              <tr>
+                <td><span class="sev-badge" [ngClass]="getSevClass(v.severity_label)">{{ v.severity_label }}</span></td>
+                <td class="plugin-id">{{ v.plugin_id }}</td>
+                <td class="plugin-name">{{ v.plugin_name }}</td>
+                <td class="count-cell">{{ v.count }}</td>
+              </tr>
+            }
+            @if (filteredVulns.length === 0) {
+              <tr><td colspan="4" class="no-vulns">No vulnerabilities for this filter</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Success toast -->
+  @if (toast) {
+    <div class="nessus-toast">
+      <mat-icon>check_circle</mat-icon>
+      {{ toast.msg }}
+    </div>
+  }
+
+  <!-- Persistent error panel -->
+  @if (errors.length) {
+    <div class="error-panel">
+      <div class="error-panel-head">
+        <mat-icon>error</mat-icon>
+        <span>{{ errors.length }} error{{ errors.length > 1 ? 's' : '' }}</span>
+        <button class="ep-dismiss-all" (click)="dismissAllErrors()">Dismiss all</button>
+      </div>
+      @for (e of errors; track e.id) {
+        <div class="error-entry">
+          <span class="error-msg">{{ e.msg }}</span>
+          <button class="ep-close" (click)="dismissError(e.id)"><mat-icon>close</mat-icon></button>
+        </div>
+      }
+    </div>
+  }
+
+</div>

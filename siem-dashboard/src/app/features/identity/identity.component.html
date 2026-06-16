@@ -1,0 +1,201 @@
+<div class="identity-container">
+  <div class="page-header">
+    <h1><mat-icon>manage_accounts</mat-icon> Identity Risk Management</h1>
+    <button mat-stroked-button (click)="loadData()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  <div class="stats-grid">
+    <app-stat-card label="High Risk Users" [value]="stats.high" icon="person_alert" severity="critical" />
+    <app-stat-card label="Medium Risk Users" [value]="stats.medium" icon="warning" severity="medium" />
+    <app-stat-card label="Low Risk Users" [value]="stats.low" icon="info" severity="low" />
+    <app-stat-card label="At-Risk Sign-Ins" [value]="stats.atRiskSignIns" icon="login" severity="medium" />
+  </div>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  <mat-tab-group (selectedIndexChange)="activeTab = $event">
+
+    <!-- Risky Users Tab -->
+    <mat-tab label="Risky Users">
+      <div class="tab-content">
+        <div class="filter-bar">
+          <mat-form-field appearance="outline">
+            <mat-label>Search users</mat-label>
+            <input matInput [(ngModel)]="searchQuery" (input)="applyUserFilter()" placeholder="Name or UPN...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Risk Level</mat-label>
+            <mat-select [(ngModel)]="selectedRiskLevel" (selectionChange)="applyUserFilter()">
+              @for (f of riskLevelFilters; track f.value) {
+                <mat-option [value]="f.value">{{ f.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="data-table-container">
+          <table mat-table [dataSource]="usersDataSource" matSort #userSort="matSort">
+
+            <ng-container matColumnDef="displayName">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Display Name</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="user-name">
+                  <mat-icon>person</mat-icon>
+                  {{ row.userDisplayName }}
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="upn">
+              <th mat-header-cell *matHeaderCellDef>User Principal Name</th>
+              <td mat-cell *matCellDef="let row" class="upn-cell">{{ row.userPrincipalName }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="riskLevel">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Risk Level</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge ' + getRiskClass(row.riskLevel)">
+                  {{ row.riskLevel | titlecase }}
+                </span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="riskState">
+              <th mat-header-cell *matHeaderCellDef>Risk State</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="badge info">{{ row.riskState | titlecase }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="riskDetail">
+              <th mat-header-cell *matHeaderCellDef>Detail</th>
+              <td mat-cell *matCellDef="let row" class="detail-cell">{{ row.riskDetail }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="updatedAt">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Last Updated</th>
+              <td mat-cell *matCellDef="let row">{{ row.riskLastUpdatedDateTime | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Actions</th>
+              <td mat-cell *matCellDef="let row">
+                <button mat-icon-button [matMenuTriggerFor]="userMenu" matTooltip="Actions">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #userMenu="matMenu">
+                  <button mat-menu-item (click)="revokeSessions(row)">
+                    <mat-icon>logout</mat-icon>
+                    <span>Revoke Sessions</span>
+                  </button>
+                  <button mat-menu-item (click)="resetPassword(row)">
+                    <mat-icon>key</mat-icon>
+                    <span>Reset Password</span>
+                  </button>
+                  <button mat-menu-item (click)="dismissRisk(row)">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Dismiss Risk</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="userColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: userColumns;"
+              [class.row-high]="row.riskLevel === 'high'"
+              [class.row-medium]="row.riskLevel === 'medium'">
+            </tr>
+          </table>
+          <mat-paginator #userPaginator [pageSizeOptions]="[25, 50, 100]" showFirstLastButtons></mat-paginator>
+        </div>
+
+        @if (!loading && usersDataSource.data.length === 0) {
+          <div class="empty-state">
+            <mat-icon>verified_user</mat-icon>
+            <p>No risky users detected</p>
+          </div>
+        }
+      </div>
+    </mat-tab>
+
+    <!-- Risky Sign-Ins Tab -->
+    <mat-tab [label]="'Risky Sign-Ins (' + stats.atRiskSignIns + ')'">
+      <div class="tab-content">
+        <div class="data-table-container">
+          <table mat-table [dataSource]="signInsDataSource">
+
+            <ng-container matColumnDef="user">
+              <th mat-header-cell *matHeaderCellDef>User</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="user-name">
+                  <mat-icon>person</mat-icon>
+                  {{ row.userDisplayName }}
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="upn">
+              <th mat-header-cell *matHeaderCellDef>UPN</th>
+              <td mat-cell *matCellDef="let row" class="upn-cell">{{ row.userPrincipalName }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="riskLevel">
+              <th mat-header-cell *matHeaderCellDef>Risk Level</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge ' + getRiskClass(row.riskLevelDuringSignIn)">
+                  {{ row.riskLevelDuringSignIn | titlecase }}
+                </span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="riskState">
+              <th mat-header-cell *matHeaderCellDef>State</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="badge info">{{ row.riskState | titlecase }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="ipAddress">
+              <th mat-header-cell *matHeaderCellDef>IP Address</th>
+              <td mat-cell *matCellDef="let row">
+                <code class="ip-code">{{ row.ipAddress }}</code>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="location">
+              <th mat-header-cell *matHeaderCellDef>Location</th>
+              <td mat-cell *matCellDef="let row">
+                {{ row.location?.city }}{{ row.location?.city && row.location?.countryOrRegion ? ', ' : '' }}{{ row.location?.countryOrRegion }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="createdAt">
+              <th mat-header-cell *matHeaderCellDef>Time</th>
+              <td mat-cell *matCellDef="let row">{{ row.createdDateTime | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="signInColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: signInColumns;"
+              [class.row-high]="row.riskLevelDuringSignIn === 'high'"
+              [class.row-medium]="row.riskLevelDuringSignIn === 'medium'">
+            </tr>
+          </table>
+          <mat-paginator #signInPaginator [pageSizeOptions]="[25, 50, 100]" showFirstLastButtons></mat-paginator>
+        </div>
+
+        @if (!loading && signInsDataSource.data.length === 0) {
+          <div class="empty-state">
+            <mat-icon>verified_user</mat-icon>
+            <p>No risky sign-ins detected</p>
+          </div>
+        }
+      </div>
+    </mat-tab>
+
+  </mat-tab-group>
+</div>

@@ -1,0 +1,38 @@
+<header class="app-header">
+  <div class="header-left">
+    <button mat-icon-button (click)="menuToggle.emit()" matTooltip="Toggle navigation">
+      <mat-icon>menu</mat-icon>
+    </button>
+    <span class="header-title">Hope International</span>
+  </div>
+
+  <div class="header-right">
+    <button mat-icon-button
+            [matTooltip]="notificationCount ? notificationCount + ' critical/high alerts (last 24h)' : 'No critical alerts'"
+            [matBadge]="notificationCount"
+            [matBadgeHidden]="notificationCount === 0"
+            matBadgeColor="warn"
+            (click)="goToNotifications()">
+      <mat-icon>notifications</mat-icon>
+    </button>
+
+    <button mat-icon-button [matMenuTriggerFor]="userMenu" class="user-avatar-btn" matTooltip="Account">
+      <div class="user-avatar">{{ initials }}</div>
+    </button>
+
+    <mat-menu #userMenu="matMenu" xPosition="before">
+      <div class="user-menu-header" mat-menu-item disabled>
+        <div class="user-menu-name">{{ displayName }}</div>
+        <div class="user-menu-email">{{ email }}</div>
+        @if (roleBadge) {
+          <span class="role-badge" [class.admin]="isAdmin">{{ roleBadge }}</span>
+        }
+      </div>
+      <mat-divider />
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Sign out</span>
+      </button>
+    </mat-menu>
+  </div>
+</header>

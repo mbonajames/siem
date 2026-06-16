@@ -1,0 +1,167 @@
+@use '@angular/material' as mat;
+
+@include mat.core();
+
+$siem-dark-theme: mat.define-theme((
+  color: (
+    theme-type: dark,
+    primary: mat.$azure-palette,
+    tertiary: mat.$cyan-palette,
+  ),
+  density: (scale: -1)
+));
+
+:root {
+  @include mat.all-component-themes($siem-dark-theme);
+  --siem-bg: #0d1117;
+  --siem-surface: #161b22;
+  --siem-surface-elevated: #1c2128;
+  --siem-border: #30363d;
+  --siem-text-primary: #e6edf3;
+  --siem-text-secondary: #8b949e;
+  --siem-critical: #da3633;
+  --siem-high: #f85149;
+  --siem-medium: #d29922;
+  --siem-low: #3fb950;
+  --siem-info: #58a6ff;
+  --siem-accent: #1f6feb;
+  --hope-orange: #F46A1F;
+  --hope-orange-dark: #C45114;
+  --hope-purple: #7F77DD;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-size: 14px;
+  font-family: 'Inter', Roboto, 'Helvetica Neue', sans-serif;
+  background-color: var(--siem-bg);
+  color: var(--siem-text-primary);
+}
+
+.severity-critical { color: var(--siem-critical) !important; }
+.severity-high { color: var(--siem-high) !important; }
+.severity-medium { color: var(--siem-medium) !important; }
+.severity-low { color: var(--siem-low) !important; }
+.severity-info { color: var(--siem-info) !important; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+
+  &.critical { background: rgba(218,54,51,0.15); color: var(--siem-critical); border: 1px solid rgba(218,54,51,0.3); }
+  &.high { background: rgba(248,81,73,0.15); color: var(--siem-high); border: 1px solid rgba(248,81,73,0.3); }
+  &.medium { background: rgba(210,153,34,0.15); color: var(--siem-medium); border: 1px solid rgba(210,153,34,0.3); }
+  &.low { background: rgba(63,185,80,0.15); color: var(--siem-low); border: 1px solid rgba(63,185,80,0.3); }
+  &.info { background: rgba(88,166,255,0.15); color: var(--siem-info); border: 1px solid rgba(88,166,255,0.3); }
+
+  &.status-active { background: rgba(63,185,80,0.15); color: var(--siem-low); border: 1px solid rgba(63,185,80,0.3); }
+  &.status-disconnected { background: rgba(218,54,51,0.15); color: var(--siem-critical); border: 1px solid rgba(218,54,51,0.3); }
+  &.status-isolated { background: rgba(210,153,34,0.15); color: var(--siem-medium); border: 1px solid rgba(210,153,34,0.3); }
+  &.status-open { background: rgba(88,166,255,0.15); color: var(--siem-info); border: 1px solid rgba(88,166,255,0.3); }
+  &.status-in-progress { background: rgba(210,153,34,0.15); color: var(--siem-medium); border: 1px solid rgba(210,153,34,0.3); }
+  &.status-done { background: rgba(63,185,80,0.15); color: var(--siem-low); border: 1px solid rgba(63,185,80,0.3); }
+}
+
+.mat-mdc-card {
+  background-color: var(--siem-surface) !important;
+  border: 1px solid var(--siem-border) !important;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--siem-text-primary);
+  }
+}
+
+.data-table-container {
+  background: var(--siem-surface);
+  border: 1px solid var(--siem-border);
+  border-radius: 8px;
+  overflow: hidden;
+
+  .mat-mdc-table {
+    background: transparent;
+  }
+
+  .mat-mdc-header-row {
+    background: var(--siem-surface-elevated);
+  }
+
+  .mat-mdc-row:hover {
+    background: var(--siem-surface-elevated);
+    cursor: pointer;
+  }
+}
+
+.filter-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+
+  mat-form-field { flex: 1; min-width: 200px; }
+}
+
+// ── Error snackbar ────────────────────────────────────────────────────────────
+.snack-error .mdc-snackbar__surface {
+  background: #2a0f0f !important;
+  border: 1px solid rgba(218, 54, 51, .5) !important;
+  color: #f85149 !important;
+}
+
+.snack-error .mat-mdc-snack-bar-label {
+  color: #f85149 !important;
+}
+
+.snack-error .mat-mdc-button {
+  color: #8b949e !important;
+}
+
+// ── Dashboard PDF export ───────────────────────────────────────────────────────
+// Applied only when exportPdf() adds this class — hides all shell chrome so the
+// browser print dialog renders only the dashboard widget grid.
+@media print {
+  body.siem-print-dashboard {
+    // Hide navigation and header
+    mat-sidenav,
+    app-header { display: none !important; }
+
+    // Reset Material sidenav container layout
+    mat-sidenav-container,
+    mat-sidenav-content {
+      display: block !important;
+      margin-left: 0 !important;
+      transform: none !important;
+      position: static !important;
+      overflow: visible !important;
+      height: auto !important;
+      width: 100% !important;
+    }
+
+    // Remove shell padding/margin from main content
+    .main-content {
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+      height: auto !important;
+    }
+  }
+}

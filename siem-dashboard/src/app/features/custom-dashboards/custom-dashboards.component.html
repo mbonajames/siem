@@ -1,0 +1,76 @@
+<div class="cd-page">
+
+  <div class="cd-header">
+    <div class="cd-header-left">
+      <h1><mat-icon>dashboard_customize</mat-icon> My Dashboards</h1>
+      <span class="cd-count">{{ dashboards.length }} dashboard{{ dashboards.length === 1 ? '' : 's' }}</span>
+    </div>
+    <button class="cd-btn cd-btn-primary" (click)="showCreateForm = !showCreateForm">
+      <mat-icon>add</mat-icon> New Dashboard
+    </button>
+  </div>
+
+  @if (loading) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+  <!-- Create form -->
+  @if (showCreateForm) {
+    <div class="cd-create-form">
+      <div class="cd-create-hdr">
+        <mat-icon style="color:#58a6ff">dashboard_customize</mat-icon>
+        New custom dashboard
+      </div>
+      <input class="cd-input" [(ngModel)]="newName" placeholder="Dashboard name (required)"
+             (keyup.enter)="create()" autofocus />
+      <input class="cd-input" [(ngModel)]="newDesc" placeholder="Description (optional)"
+             (keyup.enter)="create()" />
+      <div class="cd-create-actions">
+        <button class="cd-btn cd-btn-primary" [disabled]="!newName.trim() || creating" (click)="create()">
+          @if (creating) { <mat-icon class="spin">sync</mat-icon> } @else { <mat-icon>add</mat-icon> }
+          Create
+        </button>
+        <button class="cd-btn" (click)="showCreateForm = false; newName = ''; newDesc = ''">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- My dashboards -->
+  @if (dashboards.length === 0 && !loading) {
+    <div class="cd-empty">
+      <mat-icon>dashboard_customize</mat-icon>
+      <p>No dashboards yet. Create your first one to get started.</p>
+      <button class="cd-btn cd-btn-primary" (click)="showCreateForm = true">
+        <mat-icon>add</mat-icon> New Dashboard
+      </button>
+    </div>
+  } @else {
+    <div class="cd-grid">
+      @for (d of dashboards; track d.id) {
+        <a class="cd-card" [routerLink]="['/my-dashboards', d.id]">
+          <div class="cd-card-hdr">
+            <mat-icon class="cd-card-icon">dashboard</mat-icon>
+            <div class="cd-card-meta">
+              <span class="cd-card-name">{{ d.name }}</span>
+              @if (d.shared) {
+                <span class="cd-card-shared"><mat-icon>public</mat-icon>Shared</span>
+              }
+            </div>
+            <button class="cd-icon-btn cd-delete-btn" matTooltip="Delete"
+                    (click)="delete(d, $event)">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          </div>
+          @if (d.description) {
+            <p class="cd-card-desc">{{ d.description }}</p>
+          }
+          <div class="cd-card-foot">
+            <span class="cd-card-widgets">
+              <mat-icon>widgets</mat-icon> {{ widgetSummary(d) }}
+            </span>
+            <span class="cd-card-time">Updated {{ timeAgo(d.updated_at) }}</span>
+          </div>
+        </a>
+      }
+    </div>
+  }
+
+</div>

@@ -1,0 +1,194 @@
+<!-- ── DIVIDER: lightweight full-width separator ──────────────────────────── -->
+@if (widget.type === 'divider') {
+  <div class="wgt-divider-shell">
+    <div class="wgt-divider-body">
+      @if (widget.title) { <span class="wgt-divider-label">{{ widget.title }}</span> }
+      <div class="wgt-divider-line"></div>
+    </div>
+    @if (editMode && isOwner) {
+      <div class="wgt-divider-actions">
+        <mat-icon cdkDragHandle class="wgt-divider-drag" matTooltip="Drag to reorder">drag_indicator</mat-icon>
+        <button class="wgt-btn wgt-btn-remove" matTooltip="Remove"
+                (click)="removed.emit(widget.id); $event.stopPropagation()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    }
+  </div>
+} @else {
+
+  <!-- ── All other types use the standard widget shell ─────────────────────── -->
+  <div class="widget-shell" [class.widget-shell-auto]="widget.type === 'text'">
+
+    <!-- Header -->
+    <div class="widget-header" cdkDragHandle>
+      <mat-icon class="widget-type-icon">{{ widget.type === 'severity-tiles' ? 'bar_chart' : widget.type === 'recent-alerts' ? 'feed' : widget.type === 'ioc-summary' ? 'gpp_bad' : widget.type === 'stat-card' ? 'speed' : widget.type === 'text' ? 'text_fields' : 'analytics' }}</mat-icon>
+      <span class="widget-title">{{ widget.title }}</span>
+      @if (editMode) {
+        <mat-icon class="drag-hint" matTooltip="Drag to reorder">drag_indicator</mat-icon>
+      }
+      <div class="widget-actions">
+        @if (widget.type !== 'text') {
+          <button class="wgt-btn" matTooltip="Refresh" (click)="loadData(); $event.stopPropagation()">
+            <mat-icon>refresh</mat-icon>
+          </button>
+        }
+        @if (editMode && isOwner) {
+          <button class="wgt-btn wgt-btn-remove" matTooltip="Remove widget"
+                  (click)="removed.emit(widget.id); $event.stopPropagation()">
+            <mat-icon>close</mat-icon>
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="widget-body">
+
+      @if (loading) {
+        <div class="widget-loading">
+          <mat-spinner diameter="28"></mat-spinner>
+        </div>
+      } @else if (error) {
+        <div class="widget-error"><mat-icon>error_outline</mat-icon> {{ error }}</div>
+      } @else {
+
+        <!-- ── severity-tiles ───────────────────────────────────────────────── -->
+        @if (widget.type === 'severity-tiles') {
+          <div class="wgt-sev-tiles">
+            <a class="wgt-sev-tile" routerLink="/alerts" [queryParams]="{hours: hours}">
+              <div class="wgt-tile-lbl">Total</div>
+              <div class="wgt-tile-val" style="color:#F46A1F">{{ stats?.total ?? 0 }}</div>
+            </a>
+            @for (sev of ['Critical','High','Medium','Low']; track sev) {
+              <a class="wgt-sev-tile" routerLink="/alerts" [queryParams]="{severity: sev, hours: hours}">
+                <div class="wgt-tile-lbl">{{ sev }}</div>
+                <div class="wgt-tile-val" [style.color]="sevColor(sev)">{{ statVal(sev) }}</div>
+              </a>
+            }
+            <a class="wgt-sev-tile wgt-sev-tile-ioc" routerLink="/alerts" [queryParams]="{ioc_only:'true', hours: hours}">
+              <div class="wgt-tile-lbl"><mat-icon>gpp_bad</mat-icon> IOC</div>
+              <div class="wgt-tile-val" style="color:#7F77DD">{{ stats?.ioc_count ?? 0 }}</div>
+            </a>
+          </div>
+        }
+
+        <!-- ── stat-card ────────────────────────────────────────────────────── -->
+        @if (widget.type === 'stat-card') {
+          <div class="wgt-stat-card">
+            <div class="wgt-stat-big" [style.color]="metricColor">{{ metricVal }}</div>
+            <div class="wgt-stat-label">{{ metricLabel }}</div>
+            <div class="wgt-stat-range">last {{ hours }}h</div>
+          </div>
+        }
+
+        <!-- ── recent-alerts ────────────────────────────────────────────────── -->
+        @if (widget.type === 'recent-alerts') {
+          @if (events.length === 0) {
+            <div class="wgt-empty"><mat-icon>check_circle_outline</mat-icon> No alerts in this window</div>
+          }
+          <div class="wgt-alert-feed">
+            @for (ev of events; track ev.event_id) {
+              <div class="wgt-alert-row">
+                <span [class]="'badge ' + sevClass(ev.severity)">{{ ev.severity[0] }}</span>
+                <span class="wgt-ev-time">{{ relativeTime(ev.time) }}</span>
+                <span class="wgt-ev-src" [style.background]="srcColor(ev.source) + '33'" [style.color]="srcColor(ev.source)">{{ ev.source }}</span>
+                <span class="wgt-ev-sum">{{ ev.summary }}</span>
+                @if (ev.misp?.hit_count) {
+                  <mat-icon class="wgt-ioc-dot" matTooltip="IOC hit">gpp_bad</mat-icon>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <!-- ── severity-bars / source-bars / top-hosts / top-users ─────────── -->
+        @if (['severity-bars','source-bars','top-hosts','top-users'].includes(widget.type)) {
+          @if (bars.length === 0) {
+            <div class="wgt-empty"><mat-icon>bar_chart</mat-icon> No data</div>
+          }
+          <div class="wgt-bar-list">
+            @for (bar of bars; track bar.label) {
+              <div class="wgt-bar-row">
+                <span class="wgt-bar-label" [title]="bar.label">{{ bar.label }}</span>
+                <div class="wgt-bar-track">
+                  <div class="wgt-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+                </div>
+                <span class="wgt-bar-count" [style.color]="bar.color">{{ bar.val }}</span>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- ── source-pie / category-pie ────────────────────────────────────── -->
+        @if (widget.type === 'source-pie' || widget.type === 'category-pie') {
+          @if (pieSlices.length === 0) {
+            <div class="wgt-empty"><mat-icon>donut_large</mat-icon> No data</div>
+          } @else {
+            <div class="wgt-pie-container">
+              <svg viewBox="0 0 100 100" class="wgt-pie-svg">
+                <circle cx="50" cy="50" r="40" fill="none" stroke="var(--siem-surface-elevated)" stroke-width="18"/>
+                @for (seg of pieSlices; track seg.label) {
+                  <circle cx="50" cy="50" r="40" fill="none"
+                          [attr.stroke]="seg.color" stroke-width="18"
+                          [attr.stroke-dasharray]="seg.dash + ' ' + PIE_C"
+                          [attr.stroke-dashoffset]="seg.offset"
+                          transform="rotate(-90 50 50)"/>
+                }
+                <text x="50" y="47" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">{{ pieSlices.length }}</text>
+                <text x="50" y="58" text-anchor="middle" fill="#8b949e" font-size="7">items</text>
+              </svg>
+              <div class="wgt-pie-legend">
+                @for (seg of pieSlices; track seg.label) {
+                  <div class="wgt-legend-item">
+                    <span class="wgt-legend-dot" [style.background]="seg.color"></span>
+                    <span class="wgt-legend-label" [title]="seg.label">{{ seg.label }}</span>
+                    <span class="wgt-legend-count">{{ seg.val }}</span>
+                    <span class="wgt-legend-pct">{{ seg.pct }}%</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+
+        <!-- ── ioc-summary ──────────────────────────────────────────────────── -->
+        @if (widget.type === 'ioc-summary') {
+          <div class="wgt-ioc-summary">
+            <div class="wgt-ioc-count-row">
+              <mat-icon style="color:#7F77DD;font-size:28px;width:28px;height:28px">gpp_bad</mat-icon>
+              <div>
+                <div class="wgt-ioc-big" style="color:#7F77DD">{{ stats?.ioc_count ?? 0 }}</div>
+                <div class="wgt-ioc-sub">IOC-matched alerts · last {{ hours }}h</div>
+              </div>
+            </div>
+            @if (iocEvents.length > 0) {
+              <div class="wgt-ioc-feed">
+                @for (ev of iocEvents; track ev.event_id) {
+                  <div class="wgt-ioc-row">
+                    <span [class]="'badge ' + sevClass(ev.severity)">{{ ev.severity[0] }}</span>
+                    <span class="wgt-ev-sum">{{ ev.summary }}</span>
+                    <span class="wgt-ioc-hits" matTooltip="MISP hits">
+                      <mat-icon>gpp_bad</mat-icon>{{ ev.misp?.hit_count }}
+                    </span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <!-- ── text block ───────────────────────────────────────────────────── -->
+        @if (widget.type === 'text') {
+          @if (editMode) {
+            <textarea class="wgt-text-area" [(ngModel)]="widget.config.text"
+                      placeholder="Add notes, context, or commentary…"></textarea>
+          } @else {
+            <div class="wgt-text-content">{{ widget.config.text }}</div>
+          }
+        }
+
+      }
+    </div>
+  </div>
+}

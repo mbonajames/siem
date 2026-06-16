@@ -1,0 +1,246 @@
+<div class="devices-container">
+  <div class="page-header">
+    <h1><mat-icon>devices</mat-icon> Endpoint Security </h1>
+    <button mat-stroked-button (click)="loadDevices()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  <div class="stats-grid">
+    <app-stat-card label="Total Devices" [value]="stats.total" icon="computer" severity="info" />
+    <app-stat-card label="Good Health" [value]="stats.good" icon="check_circle" severity="low" />
+    <app-stat-card label="Suspicious" [value]="stats.suspicious" icon="warning" severity="medium" />
+    <app-stat-card label="Bad Health" [value]="stats.bad" icon="cancel" severity="critical" />
+    <app-stat-card label="Isolated" [value]="stats.isolated" icon="lock" severity="medium"/>
+  </div>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  <mat-tab-group (selectedIndexChange)="activeTab = $event">
+    <!-- All Devices Tab -->
+    <mat-tab label="All Devices">
+      <div class="tab-content">
+        <div class="filter-bar">
+          <mat-form-field appearance="outline">
+            <mat-label>Search devices or user</mat-label>
+            <input matInput [(ngModel)]="searchQuery" (input)="onSearch()" placeholder="Hostname or username...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Type</mat-label>
+            <mat-select [(ngModel)]="selectedType" (selectionChange)="applyFilters()">
+              @for (f of typeFilters; track f.value) {
+                <mat-option [value]="f.value">{{ f.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Health Status</mat-label>
+            <mat-select [(ngModel)]="selectedHealth" (selectionChange)="applyFilters()">
+              @for (f of healthFilters; track f.value) {
+                <mat-option [value]="f.value">{{ f.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="data-table-container">
+          <table mat-table [dataSource]="dataSource" matSort>
+            <ng-container matColumnDef="hostname">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Hostname</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="device-name">
+                  <mat-icon>computer</mat-icon>
+                  {{ row.hostname }}
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="type">
+              <th mat-header-cell *matHeaderCellDef>Type</th>
+              <td mat-cell *matCellDef="let row">{{ row.type }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="os">
+              <th mat-header-cell *matHeaderCellDef>OS</th>
+              <td mat-cell *matCellDef="let row">{{ row.os?.name }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="assignedUser">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Assigned User</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.assignedUser) {
+                  <span class="assigned-user" [matTooltip]="row.assignedUser">
+                    <mat-icon>person</mat-icon>
+                    {{ row.assignedUser }}
+                  </span>
+                } @else {
+                  <span class="unassigned">—</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="health">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Health</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge ' + getHealthClass(row.health?.overall)">
+                  <mat-icon>{{ getHealthIcon(row.health?.overall) }}</mat-icon>
+                  {{ row.health?.overall | titlecase }}
+                </span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="isolation">
+              <th mat-header-cell *matHeaderCellDef>State</th>
+              <td mat-cell *matCellDef="let row">
+                @if (isolationPending.has(row.id)) {
+                  <span class="badge status-pending">
+                    <span class="pending-spinner"></span>
+                    {{ isolationPending.get(row.id) === 'isolating' ? 'Isolating…' : 'Removing…' }}
+                  </span>
+                } @else if (row.isolation?.status === 'isolated') {
+                  <span class="badge status-isolated">
+                    <mat-icon>lock</mat-icon> Isolated
+                  </span>
+                } @else {
+                  <span class="badge status-active">Connected</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="lastSeen">
+              <th mat-header-cell *matHeaderCellDef>Last Seen</th>
+              <td mat-cell *matCellDef="let row">{{ row.lastSeenAt | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Actions</th>
+              <td mat-cell *matCellDef="let row">
+                <button mat-icon-button [matMenuTriggerFor]="deviceMenu">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #deviceMenu="matMenu">
+                  <button mat-menu-item (click)="viewHealth(row)">
+                    <mat-icon>monitor_heart</mat-icon>
+                    <span>View Health Details</span>
+                  </button>
+                  <button mat-menu-item (click)="openInSophosCentral(row)"
+                    matTooltip="Reset Health is only available in the Sophos Central web UI">
+                    <mat-icon>open_in_new</mat-icon>
+                    <span>Reset health</span>
+                  </button>
+                  <button mat-menu-item (click)="checkUpdates(row)">
+                    <mat-icon>system_update</mat-icon>
+                    <span>Update</span>
+                  </button>
+                  <button mat-menu-item (click)="scanDevice(row)">
+                    <mat-icon>manage_search</mat-icon>
+                    <span>Scan Now</span>
+                  </button>
+                  <button mat-menu-item (click)="toggleTamperProtection(row)">
+                    <mat-icon>security</mat-icon>
+                    <span>Toggle Tamper Protection</span>
+                  </button>
+                  <mat-divider></mat-divider>
+                  <button mat-menu-item (click)="isolateDevice(row)"
+                    [disabled]="row.isolation?.status === 'isolated' || isolationPending.has(row.id)"
+                    class="isolate-action">
+                    <mat-icon>lock</mat-icon>
+                    <span>Isolate Device</span>
+                  </button>
+                  <button mat-menu-item (click)="removeIsolation(row)"
+                    [disabled]="row.isolation?.status !== 'isolated' || isolationPending.has(row.id)">
+                    <mat-icon>lock_open</mat-icon>
+                    <span>Remove Isolation</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+              [class.row-bad]="row.health?.overall === 'bad'"
+              [class.row-suspicious]="row.health?.overall === 'suspicious'"
+              [class.row-isolated]="row.isolation?.status === 'isolated'">
+            </tr>
+          </table>
+          <mat-paginator [pageSizeOptions]="[25, 50, 100]" showFirstLastButtons></mat-paginator>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Isolated Devices Tab -->
+    <mat-tab [label]="'Isolated Devices (' + isolatedDevices.length + ')'">
+      <div class="tab-content">
+        @if (isolatedDevices.length === 0) {
+          <div class="empty-isolated">
+            <mat-icon>lock_open</mat-icon>
+            <p>No isolated devices</p>
+          </div>
+        }
+        <div class="isolated-grid">
+          @for (device of isolatedDevices; track device.id) {
+            <mat-card class="isolated-card">
+              <mat-card-content>
+                <div class="isolated-header">
+                  <mat-icon class="severity-medium">lock</mat-icon>
+                  <div>
+                    <div class="isolated-hostname">{{ device.hostname }}</div>
+                    <div class="isolated-type">{{ device.type }} · {{ device.os?.name }}</div>
+                  </div>
+                </div>
+                <div class="isolated-meta">
+                  <span>Last seen: {{ device.lastSeenAt | date:'MM/dd HH:mm' }}</span>
+                </div>
+                <button mat-stroked-button color="warn" (click)="removeIsolation(device)" class="unisolate-btn">
+                  <mat-icon>lock_open</mat-icon>
+                  Remove Isolation
+                </button>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Wazuh Agents Tab -->
+    <mat-tab label="Wazuh Agents">
+      <div class="tab-content">
+        <div class="data-table-container">
+          <table mat-table [dataSource]="wazuhAgents">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Agent Name</th>
+              <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="ip">
+              <th mat-header-cell *matHeaderCellDef>IP</th>
+              <td mat-cell *matCellDef="let row">{{ row.ip }}</td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge status-' + row.status">{{ row.status }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="os">
+              <th mat-header-cell *matHeaderCellDef>OS</th>
+              <td mat-cell *matCellDef="let row">{{ row.os?.name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="version">
+              <th mat-header-cell *matHeaderCellDef>Version</th>
+              <td mat-cell *matCellDef="let row">{{ row.version }}</td>
+            </ng-container>
+            <ng-container matColumnDef="lastKeepAlive">
+              <th mat-header-cell *matHeaderCellDef>Last Active</th>
+              <td mat-cell *matCellDef="let row">{{ row.lastKeepAlive | date:'MM/dd HH:mm' }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="['name','ip','status','os','version','lastKeepAlive']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['name','ip','status','os','version','lastKeepAlive'];"></tr>
+          </table>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

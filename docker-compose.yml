@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ./APIGateway
+    container_name: siem-api
+    restart: unless-stopped
+    env_file: ./APIGateway/.env
+    networks:
+      - siem-net
+    # Port 8000 is NOT exposed externally — only reachable via the nginx proxy
+
+  frontend:
+    build:
+      context: ./siem-dashboard
+    container_name: siem-ui
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8443:8443"
+    volumes:
+      - ./docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+    networks:
+      - siem-net
+
+networks:
+  siem-net:
+    driver: bridge

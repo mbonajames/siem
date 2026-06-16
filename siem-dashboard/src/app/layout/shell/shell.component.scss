@@ -1,0 +1,23 @@
+.shell-container {
+  height: 100vh;
+  background-color: var(--siem-bg);
+}
+
+.shell-sidenav {
+  width: 240px;
+  background-color: var(--siem-surface);
+  border-right: 1px solid var(--siem-border) !important;
+}
+
+.shell-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--siem-bg);
+}
+
+.main-content {
+  flex: 1;
+  padding: 14px 16px;
+  overflow-y: auto;
+}

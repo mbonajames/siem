@@ -1,0 +1,154 @@
+<div class="jira-container">
+
+  <div class="page-header">
+    <h1><mat-icon>confirmation_number</mat-icon> JIRA Tickets</h1>
+    <button mat-stroked-button (click)="load()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  <!-- Overview stats -->
+  @if (!loading && tickets.length > 0) {
+    <div class="overview-bar">
+      <div class="ov-stat">
+        <span class="ov-val">{{ overview.total }}</span>
+        <span class="ov-lbl">Total</span>
+      </div>
+      <div class="ov-divider"></div>
+      <div class="ov-stat clickable" [class.active]="assignedFilter === 'assigned'" (click)="assignedFilter = assignedFilter === 'assigned' ? '' : 'assigned'">
+        <span class="ov-val assigned">{{ overview.assigned }}</span>
+        <span class="ov-lbl">Assigned</span>
+      </div>
+      <div class="ov-stat clickable" [class.active]="assignedFilter === 'unassigned'" (click)="assignedFilter = assignedFilter === 'unassigned' ? '' : 'unassigned'">
+        <span class="ov-val unassigned">{{ overview.unassigned }}</span>
+        <span class="ov-lbl">Unassigned</span>
+      </div>
+      <div class="ov-divider"></div>
+      <div class="ov-stat">
+        <span class="ov-val critical">{{ overview.critical }}</span>
+        <span class="ov-lbl">Critical</span>
+      </div>
+      <div class="ov-stat">
+        <span class="ov-val high">{{ overview.high }}</span>
+        <span class="ov-lbl">High</span>
+      </div>
+    </div>
+  }
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <mat-button-toggle-group [(ngModel)]="statusFilter" (change)="onFilterChange()">
+      <mat-button-toggle value="open">Open</mat-button-toggle>
+      <mat-button-toggle value="all">All</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-button-toggle-group [(ngModel)]="severityFilter" (change)="onFilterChange()">
+      <mat-button-toggle value="">All Severities</mat-button-toggle>
+      <mat-button-toggle value="critical">Critical</mat-button-toggle>
+      <mat-button-toggle value="high">High</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-button-toggle-group [(ngModel)]="assignedFilter">
+      <mat-button-toggle value="">All</mat-button-toggle>
+      <mat-button-toggle value="assigned">Assigned</mat-button-toggle>
+      <mat-button-toggle value="unassigned">Unassigned</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  @if (loading) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+  @if (error) {
+    <div class="api-error">
+      <mat-icon>error_outline</mat-icon> {{ error }}
+    </div>
+  }
+
+  <div class="result-meta">
+    <span class="result-count">{{ filteredTickets.length | number }}</span>
+    ticket{{ filteredTickets.length === 1 ? '' : 's' }}
+    @if (assignedFilter) { <span class="filter-badge">· {{ assignedFilter }}</span> }
+  </div>
+
+  <!-- Ticket table -->
+  <div class="ticket-list">
+
+    <div class="ticket-hdr">
+      <div class="col-key">Key</div>
+      <div class="col-sev">Severity</div>
+      <div class="col-summary">Summary</div>
+      <div class="col-status">Status</div>
+      <div class="col-assignee">Assignee</div>
+      <div class="col-created">Created</div>
+      <div class="col-act"></div>
+    </div>
+
+    @if (!loading && filteredTickets.length === 0) {
+      <div class="ticket-empty">
+        <mat-icon>check_circle_outline</mat-icon>
+        No SIEM tickets match the current filters.
+      </div>
+    }
+
+    @for (t of filteredTickets; track t.key) {
+      <div class="ticket-row" (click)="open(t.url)">
+
+        <div class="col-key">
+          <span class="key-chip">{{ t.key }}</span>
+        </div>
+
+        <div class="col-sev">
+          @if (t.severity) {
+            <span [class]="'badge ' + severityClass(t.severity)">{{ t.severity | titlecase }}</span>
+          }
+        </div>
+
+        <div class="col-summary">
+          <span class="summary-text" [matTooltip]="t.summary">{{ t.summary }}</span>
+        </div>
+
+        <div class="col-status">
+          <span [class]="'status-chip status-' + statusClass(t.status_category)">{{ t.status }}</span>
+        </div>
+
+        <!-- Assignee + inline assign dropdown -->
+        <div class="col-assignee" (click)="$event.stopPropagation()">
+          @if (t.assignee !== 'Unassigned') {
+            <span class="assignee-text">
+              <mat-icon class="assignee-icon">person</mat-icon>{{ t.assignee }}
+            </span>
+          } @else {
+            <div class="assign-wrap">
+              <button class="assign-btn" (click)="toggleAssignPanel(t.key, $event)">
+                <mat-icon>person_add</mat-icon> Assign
+              </button>
+              @if (assigningKey === t.key) {
+                <div class="assign-dropdown" (click)="$event.stopPropagation()">
+                  @if (assignees.length === 0) {
+                    <span class="assign-empty">No assignees found</span>
+                  }
+                  @for (a of assignees; track a.account_id) {
+                    <button class="assign-option" (click)="assign(t, a, $event)">
+                      <mat-icon>person</mat-icon>{{ a.display_name }}
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="col-created">
+          <span class="time-text">{{ t.created | date:'MM/dd/yy HH:mm' }}</span>
+        </div>
+
+        <div class="col-act" (click)="$event.stopPropagation()">
+          <button mat-icon-button [matTooltip]="'Open ' + t.key + ' in JIRA'" (click)="open(t.url)">
+            <mat-icon>open_in_new</mat-icon>
+          </button>
+        </div>
+
+      </div>
+    }
+  </div>
+
+</div>

@@ -1,0 +1,108 @@
+<div class="rules-container">
+  <div class="page-header">
+    <h1><mat-icon>rule</mat-icon> Rules & Decoders</h1>
+    <button mat-stroked-button (click)="loadRules()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  @if (loading) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+  <mat-tab-group>
+    <mat-tab [label]="'Rules (' + rulesDataSource.data.length + ')'">
+      <div class="tab-content">
+        <div class="filter-bar">
+          <mat-form-field appearance="outline">
+            <mat-label>Search rules</mat-label>
+            <input matInput [(ngModel)]="rulesSearch" (input)="filterRules()" placeholder="Rule ID or description...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Min Level</mat-label>
+            <mat-select [(ngModel)]="selectedLevel" (selectionChange)="filterRules()">
+              @for (l of levels; track l.value) {
+                <mat-option [value]="l.value">{{ l.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="data-table-container">
+          <table mat-table [dataSource]="rulesDataSource" matSort>
+            <ng-container matColumnDef="id">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>ID</th>
+              <td mat-cell *matCellDef="let row"><code>{{ row.id }}</code></td>
+            </ng-container>
+            <ng-container matColumnDef="level">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Level</th>
+              <td mat-cell *matCellDef="let row">
+                <span [class]="'badge ' + getLevelClass(row.level)">{{ row.level }}</span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="description">
+              <th mat-header-cell *matHeaderCellDef>Description</th>
+              <td mat-cell *matCellDef="let row" class="desc-cell">{{ row.description }}</td>
+            </ng-container>
+            <ng-container matColumnDef="groups">
+              <th mat-header-cell *matHeaderCellDef>Groups</th>
+              <td mat-cell *matCellDef="let row">
+                @for (g of (row.groups ?? []).slice(0,3); track g) {
+                  <mat-chip class="group-chip">{{ g }}</mat-chip>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="mitre">
+              <th mat-header-cell *matHeaderCellDef>MITRE</th>
+              <td mat-cell *matCellDef="let row">
+                @for (id of getMitreIds(row).slice(0,2); track id) {
+                  <span class="mitre-chip" [matTooltip]="row.mitre?.technique?.[0] ?? ''">{{ id }}</span>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="filename">
+              <th mat-header-cell *matHeaderCellDef>File</th>
+              <td mat-cell *matCellDef="let row"><span class="filename">{{ row.filename }}</span></td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="rulesColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: rulesColumns;"></tr>
+          </table>
+          <mat-paginator #rulesPaginator [pageSizeOptions]="[25,50,100]" showFirstLastButtons></mat-paginator>
+        </div>
+      </div>
+    </mat-tab>
+
+    <mat-tab [label]="'Decoders (' + decodersDataSource.data.length + ')'">
+      <div class="tab-content">
+        <div class="filter-bar">
+          <mat-form-field appearance="outline">
+            <mat-label>Search decoders</mat-label>
+            <input matInput [(ngModel)]="decodersSearch" (input)="filterDecoders()" placeholder="Decoder name or program...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+        </div>
+        <div class="data-table-container">
+          <table mat-table [dataSource]="decodersDataSource">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Name</th>
+              <td mat-cell *matCellDef="let row"><code>{{ row.name }}</code></td>
+            </ng-container>
+            <ng-container matColumnDef="program_name">
+              <th mat-header-cell *matHeaderCellDef>Program</th>
+              <td mat-cell *matCellDef="let row">{{ row.program_name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="parent">
+              <th mat-header-cell *matHeaderCellDef>Parent</th>
+              <td mat-cell *matCellDef="let row">{{ row.parent }}</td>
+            </ng-container>
+            <ng-container matColumnDef="filename">
+              <th mat-header-cell *matHeaderCellDef>File</th>
+              <td mat-cell *matCellDef="let row"><span class="filename">{{ row.filename }}</span></td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="decodersColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: decodersColumns;"></tr>
+          </table>
+          <mat-paginator #decodersPaginator [pageSizeOptions]="[25,50]" showFirstLastButtons></mat-paginator>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

@@ -1,0 +1,96 @@
+.sidebar-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--siem-surface);
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 1px solid var(--siem-border);
+
+  .brand-logo {
+    height: 32px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--siem-text-primary);
+  }
+}
+
+.nav-list {
+  flex: 1;
+  min-height: 0;
+  padding: 1px 0 0 !important;
+  overflow-y: auto;
+
+  // Strip Material MDC list default vertical padding
+  ::ng-deep .mat-mdc-list-base {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+}
+
+.nav-item {
+  border-radius: 6px !important;
+  margin: 0 4px !important;
+  color: var(--siem-text-secondary) !important;
+  --mdc-list-list-item-one-line-container-height: 34px !important;
+
+  mat-icon {
+    color: var(--siem-text-secondary) !important;
+    font-size: 17px !important;
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  ::ng-deep .mdc-list-item__primary-text {
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0 !important;
+    line-height: 1 !important;
+  }
+
+  ::ng-deep .mdc-list-item__content {
+    padding: 0 !important;
+  }
+
+  ::ng-deep .mat-mdc-list-item-unscoped-content {
+    padding: 0 6px !important;
+  }
+
+  ::ng-deep .mat-mdc-list-item {
+    padding: 0 6px !important;
+  }
+
+  &.active {
+    background-color: rgba(31,111,235,0.15) !important;
+    color: var(--siem-info) !important;
+    mat-icon { color: var(--siem-info) !important; }
+  }
+
+  &:hover:not(.active) {
+    background-color: var(--siem-surface-elevated) !important;
+    color: var(--siem-text-primary) !important;
+    mat-icon { color: var(--siem-text-primary) !important; }
+  }
+}
+
+.sidebar-brand {
+  padding: 14px 16px;
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--siem-border);
+  padding-bottom: 8px;
+}

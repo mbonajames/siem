@@ -1,0 +1,634 @@
+<div class="alerts-container">
+  <div class="page-header">
+    <div class="header-title-group">
+      <h1><mat-icon>warning_amber</mat-icon> Alerts</h1>
+      <!-- <span class="source-badge">
+        <mat-icon style="font-size:12px;width:12px;height:12px;vertical-align:middle">hub</mat-icon>
+        All
+      </span> -->
+    </div>
+    <button mat-stroked-button (click)="loadAlerts()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <!-- Time range -->
+    <div class="pill-group">
+      @for (t of timeRanges; track t.value) {
+        <button class="pill-seg" [class.active]="selectedHours === t.value"
+                (click)="selectedHours = t.value; onTimeChange()">{{ t.label }}</button>
+      }
+    </div>
+
+    <!-- Severity -->
+    <div class="pill-wrap">
+      <mat-icon class="pill-icon">warning_amber</mat-icon>
+      <select class="pill-select" [(ngModel)]="selectedSeverity" (change)="onFilterChange()">
+        @for (s of severityOptions; track s.value) {
+          <option [value]="s.value">{{ s.label }}</option>
+        }
+      </select>
+      <mat-icon class="pill-caret">expand_more</mat-icon>
+    </div>
+
+    <!-- Source -->
+    <div class="pill-wrap">
+      <mat-icon class="pill-icon">devices_other</mat-icon>
+      <select class="pill-select" [(ngModel)]="selectedSource" (change)="onFilterChange()">
+        @for (s of sourceOptions; track s.value) {
+          <option [value]="s.value">{{ s.label }}</option>
+        }
+      </select>
+      <mat-icon class="pill-caret">expand_more</mat-icon>
+    </div>
+
+    <!-- Search -->
+    <div class="pill-wrap pill-search">
+      <mat-icon class="pill-icon">search</mat-icon>
+      <input class="pill-input" [(ngModel)]="searchQuery" (input)="onSearchInput()"
+             placeholder="Summary, agent, user, host, IP…">
+    </div>
+
+    <!-- IOC-only toggle -->
+    <button class="pill-wrap pill-ioc" [class.active]="iocOnly" (click)="toggleIocFilter()"
+            matTooltip="Show only alerts with MISP IOC matches">
+      <mat-icon class="pill-icon">gpp_bad</mat-icon>
+      IOC Hits
+    </button>
+  </div>
+
+  @if (loading) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+  <div class="result-meta">
+    <span class="result-count">{{ total | number }}</span>
+    <span class="result-window"> event{{ total === 1 ? '' : 's' }} matched</span>
+    <span class="result-loaded"> · showing {{ alerts.length }}</span>
+  </div>
+
+  <!-- Alert list -->
+  <div class="alert-list">
+
+    <!-- Header -->
+    <div class="alert-hdr">
+      <div class="col-time">Time</div>
+      <div class="col-sev">Severity</div>
+      <div class="col-src">Source</div>
+      <div class="col-cat">Category</div>
+      <div class="col-desc">Summary</div>
+      <div class="col-ent">Entities</div>
+      <div class="col-jira">Ticket</div>
+      <div class="col-act"></div>
+    </div>
+
+    @if (!loading && alerts.length === 0) {
+      <div class="alert-empty">
+        <mat-icon>check_circle_outline</mat-icon>
+        No events match the current filters.
+      </div>
+    }
+
+    @for (row of alerts; track row.event_id) {
+
+      <!-- Main row -->
+      <div class="alert-row"
+           [class.row-crit]="row.severity === 'Critical'"
+           [class.row-expanded]="expandedEvent === row"
+           (click)="toggleRow(row)">
+
+        <div class="col-time">{{ row.time | date:'MM/dd HH:mm:ss' }}</div>
+
+        <div class="col-sev">
+          <span [class]="'badge ' + severityClass(row.severity)">{{ row.severity }}</span>
+          @if (row.misp?.hit_count) {
+            <span class="ioc-row-badge"
+                  [matTooltip]="row.misp!.hit_count + ' MISP IOC match' + (row.misp!.hit_count === 1 ? '' : 'es')">
+              <mat-icon>gpp_bad</mat-icon>IOC
+            </span>
+          }
+        </div>
+
+        <div class="col-src">
+          <span class="src-chip">
+            <mat-icon class="src-icon" [matTooltip]="row.source">{{ sourceIcon(row.source) }}</mat-icon>
+            {{ row.source }}
+          </span>
+        </div>
+
+        <div class="col-cat">
+          <span class="cat-text" [matTooltip]="row.event_class">{{ row.category }}</span>
+        </div>
+
+        <div class="col-desc">
+          <span class="desc-text" [matTooltip]="row.summary">{{ row.summary }}</span>
+        </div>
+
+        <div class="col-ent">
+          <div class="ent-chips">
+            @if (row.user)   { <span class="ent-chip user-chip"  [matTooltip]="'User: ' + row.user"><mat-icon>person</mat-icon>{{ row.user }}</span> }
+            @if (row.host)   { <span class="ent-chip host-chip"  [matTooltip]="'Host: ' + row.host"><mat-icon>computer</mat-icon>{{ row.host }}</span> }
+            @if (row.src_ip) { <span class="ent-chip ip-chip"    [matTooltip]="'IP: ' + row.src_ip"><mat-icon>router</mat-icon>{{ row.src_ip }}</span> }
+          </div>
+        </div>
+
+        <!-- JIRA ticket column -->
+        <div class="col-jira" (click)="$event.stopPropagation()">
+          @if (row.severity === 'Critical' || row.severity === 'High') {
+            @if (ticketFor(row.event_id); as ticket) {
+              <a class="jira-chip" [href]="ticket.url" target="_blank" rel="noopener">
+                <mat-icon>confirmation_number</mat-icon>{{ ticket.key }}
+              </a>
+            } @else if (creatingTicket.has(row.event_id)) {
+              <span class="jira-creating"><mat-icon class="spin-sm">sync</mat-icon></span>
+            } @else if (row.severity === 'High') {
+              <button class="jira-btn" (click)="createTicket(row)">
+                <mat-icon>add_task</mat-icon> Ticket
+              </button>
+            }
+          }
+        </div>
+
+        <div class="col-act" (click)="$event.stopPropagation()">
+          <mat-icon class="expand-icon">{{ expandedEvent === row ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </div>
+      </div>
+
+      <!-- Expanded detail + Investigate -->
+      @if (expandedEvent === row) {
+        <div class="expanded-panel">
+
+          <!-- Event overview -->
+          <div class="exp-overview-grid">
+            <div class="ov-item">
+              <span class="ov-label">Event ID</span>
+              <span class="ov-val monospace">{{ row.event_id }}</span>
+            </div>
+            <div class="ov-item">
+              <span class="ov-label">Time</span>
+              <span class="ov-val">{{ row.time | date:'yyyy-MM-dd HH:mm:ss' }}</span>
+            </div>
+            <div class="ov-item">
+              <span class="ov-label">Source</span>
+              <span class="ov-val">{{ row.source }}</span>
+            </div>
+            <div class="ov-item">
+              <span class="ov-label">Category / Class</span>
+              <span class="ov-val">{{ row.category }} · {{ row.event_class }}</span>
+            </div>
+            @if (row.remote_ip) {
+              <div class="ov-item">
+                <span class="ov-label">Remote IP</span>
+                <span class="ov-val monospace">{{ row.remote_ip }}@if (row.remote_port) { :{{ row.remote_port }} }</span>
+              </div>
+            }
+            @if (row.domain) {
+              <div class="ov-item">
+                <span class="ov-label">Domain</span>
+                <span class="ov-val monospace">{{ row.domain }}</span>
+              </div>
+            }
+          </div>
+
+          <!-- Investigate buttons -->
+          @if (entityPairs(row).length > 0) {
+            <div class="exp-section">
+              <div class="exp-label">Investigate entity</div>
+              <div class="investigate-buttons">
+                @for (ep of entityPairs(row); track ep.value) {
+                  <button mat-stroked-button class="inv-btn"
+                          (click)="startInvestigate(ep.type, ep.value, $event)">
+                    <mat-icon>manage_search</mat-icon>
+                    {{ ep.type }}: {{ ep.value }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- VirusTotal lookup -->
+          @if (vtLookupTargets(row).length > 0) {
+            <div class="exp-section">
+              <div class="exp-label">
+                <span class="vt-label-icon">VT</span> VirusTotal lookup
+              </div>
+              <div class="investigate-buttons">
+                @for (t of vtLookupTargets(row); track t.value) {
+                  <button mat-stroked-button class="inv-btn vt-btn"
+                          [class.vt-btn-active]="vtTarget?.value === t.value"
+                          (click)="lookupVt(t.iocType, t.value, $event)">
+                    <mat-icon>{{ t.iocType === 'ip' ? 'router' : t.iocType === 'domain' ? 'language' : 'fingerprint' }}</mat-icon>
+                    {{ t.label }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- VirusTotal result panel -->
+          @if (vtLoading && vtTarget) {
+            <div class="vt-panel">
+              <mat-progress-bar mode="indeterminate" color="warn"></mat-progress-bar>
+              <span class="inv-loading">Querying VirusTotal for {{ vtTarget.value }}…</span>
+            </div>
+          }
+
+          @if (vtError) {
+            <div class="vt-panel vt-error-panel">
+              <mat-icon>error_outline</mat-icon> {{ vtError }}
+              <button mat-icon-button class="inv-close" (click)="closeVt()"><mat-icon>close</mat-icon></button>
+            </div>
+          }
+
+          @if (vtResult && !vtLoading) {
+            <div class="vt-panel">
+              <!-- Header row -->
+              <div class="vt-header">
+                <span class="vt-header-ioc">
+                  <mat-icon>{{ vtResult.ioc_type === 'ip' ? 'router' : vtResult.ioc_type === 'domain' ? 'language' : 'fingerprint' }}</mat-icon>
+                  {{ vtResult.ioc_value }}
+                </span>
+                <span [class]="'vt-verdict ' + vtVerdictClass(vtResult.verdict)">
+                  {{ vtResult.verdict | uppercase }}
+                </span>
+                <span class="vt-ratio">{{ vtDetectionRatio(vtResult.stats) }} engines</span>
+                <a [href]="vtResult.permalink" target="_blank" rel="noopener" class="vt-permalink" title="View on VirusTotal">
+                  <mat-icon>open_in_new</mat-icon>
+                </a>
+                <button mat-icon-button class="inv-close" (click)="closeVt()"><mat-icon>close</mat-icon></button>
+              </div>
+
+              <!-- Stats bars -->
+              <div class="vt-stats-row">
+                @if (vtResult.stats.malicious) {
+                  <div class="vt-stat-bar">
+                    <span class="vt-stat-label vt-stat-mal">Malicious</span>
+                    <span class="vt-stat-count vt-stat-mal">{{ vtResult.stats.malicious }}</span>
+                  </div>
+                }
+                @if (vtResult.stats.suspicious) {
+                  <div class="vt-stat-bar">
+                    <span class="vt-stat-label vt-stat-sus">Suspicious</span>
+                    <span class="vt-stat-count vt-stat-sus">{{ vtResult.stats.suspicious }}</span>
+                  </div>
+                }
+                @if (vtResult.stats.harmless) {
+                  <div class="vt-stat-bar">
+                    <span class="vt-stat-label vt-stat-ok">Harmless</span>
+                    <span class="vt-stat-count vt-stat-ok">{{ vtResult.stats.harmless }}</span>
+                  </div>
+                }
+                @if (vtResult.stats.undetected) {
+                  <div class="vt-stat-bar">
+                    <span class="vt-stat-label vt-stat-nd">Undetected</span>
+                    <span class="vt-stat-count vt-stat-nd">{{ vtResult.stats.undetected }}</span>
+                  </div>
+                }
+              </div>
+
+              <!-- Metadata grid -->
+              <div class="vt-meta-grid">
+                @if (vtResult.reputation != null) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">Reputation</span>
+                    <span class="vt-meta-val" [style.color]="vtResult.reputation < 0 ? '#da3633' : '#3fb950'">
+                      {{ vtResult.reputation }}
+                    </span>
+                  </div>
+                }
+                @if (vtResult.country) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">Country</span>
+                    <span class="vt-meta-val">{{ vtResult.country }}</span>
+                  </div>
+                }
+                @if (vtResult.asn) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">ASN</span>
+                    <span class="vt-meta-val">AS{{ vtResult.asn }}@if (vtResult.as_owner) { · {{ vtResult.as_owner }} }</span>
+                  </div>
+                }
+                @if (vtResult.network) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">Network</span>
+                    <span class="vt-meta-val monospace">{{ vtResult.network }}</span>
+                  </div>
+                }
+                @if (vtResult.registrar) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">Registrar</span>
+                    <span class="vt-meta-val">{{ vtResult.registrar }}</span>
+                  </div>
+                }
+                @if (vtResult.categories?.length) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">Categories</span>
+                    <span class="vt-meta-val">{{ vtResult.categories!.join(', ') }}</span>
+                  </div>
+                }
+                @if (vtResult.meaningful_name) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">File name</span>
+                    <span class="vt-meta-val monospace">{{ vtResult.meaningful_name }}</span>
+                  </div>
+                }
+                @if (vtResult.type_description) {
+                  <div class="vt-meta-item">
+                    <span class="vt-meta-label">File type</span>
+                    <span class="vt-meta-val">{{ vtResult.type_description }}</span>
+                  </div>
+                }
+                @if (vtResult.sha256) {
+                  <div class="vt-meta-item vt-meta-full">
+                    <span class="vt-meta-label">SHA256</span>
+                    <span class="vt-meta-val monospace small">{{ vtResult.sha256 }}</span>
+                  </div>
+                }
+                <div class="vt-meta-item">
+                  <span class="vt-meta-label">Last analysis</span>
+                  <span class="vt-meta-val">{{ vtLastAnalysis(vtResult.last_analysis_date) }}</span>
+                </div>
+              </div>
+
+              <!-- Tags -->
+              @if (vtResult.tags?.length) {
+                <div class="vt-tags">
+                  @for (tag of vtResult.tags; track tag) {
+                    <span class="vt-tag">{{ tag }}</span>
+                  }
+                </div>
+              }
+
+              <!-- Top detections -->
+              @if (vtResult.top_detections.length > 0) {
+                <div class="vt-detections">
+                  <div class="exp-label" style="margin-bottom:6px">
+                    <mat-icon style="font-size:12px;width:12px;height:12px;color:#da3633">gpp_bad</mat-icon>
+                    Detection engines ({{ vtResult.top_detections.length }})
+                  </div>
+                  <div class="vt-det-grid">
+                    @for (d of vtResult.top_detections; track d.engine) {
+                      <div class="vt-det-row">
+                        <span [class]="'vt-det-cat vt-stat-' + (d.category === 'malicious' ? 'mal' : 'sus')">
+                          {{ d.category[0].toUpperCase() }}
+                        </span>
+                        <span class="vt-det-engine">{{ d.engine }}</span>
+                        <span class="vt-det-result">{{ d.result }}</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- WHOIS (collapsible) -->
+              @if (vtResult.whois) {
+                <details class="vt-whois">
+                  <summary>WHOIS</summary>
+                  <pre class="vt-whois-body">{{ vtResult.whois }}</pre>
+                </details>
+              }
+
+            </div>
+          }
+
+          <!-- Investigate results -->
+          @if (investigating && investigateTarget) {
+            <div class="investigate-panel">
+              <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+              <span class="inv-loading">Investigating {{ investigateTarget.type }}: {{ investigateTarget.value }}…</span>
+            </div>
+          }
+
+          @if (investigateError) {
+            <div class="api-error">
+              <mat-icon>error_outline</mat-icon> {{ investigateError }}
+            </div>
+          }
+
+          @if (investigateResult && !investigating) {
+            <div class="investigate-panel">
+              <div class="inv-header">
+                <span class="inv-title">
+                  <mat-icon>manage_search</mat-icon>
+                  Investigation: {{ investigateResult.entity.type }} — {{ investigateResult.entity.value }}
+                </span>
+                <button mat-icon-button class="inv-close" (click)="closeInvestigate()">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+
+              <!-- Summary stats -->
+              <div class="inv-stats">
+                <div class="inv-stat">
+                  <span class="inv-stat-val">{{ investigateResult.summary.total }}</span>
+                  <span class="inv-stat-lbl">Total events</span>
+                </div>
+                @for (entry of severityEntries(investigateResult.summary.by_severity); track entry.sev) {
+                  <div class="inv-stat">
+                    <span [class]="'inv-stat-val sev-' + severityClass(entry.sev)">{{ entry.count }}</span>
+                    <span class="inv-stat-lbl">{{ entry.sev }}</span>
+                  </div>
+                }
+                @for (entry of objectEntries(investigateResult.summary.by_source); track entry.key) {
+                  <div class="inv-stat">
+                    <span class="inv-stat-val">{{ entry.val }}</span>
+                    <span class="inv-stat-lbl">{{ entry.key }}</span>
+                  </div>
+                }
+              </div>
+
+              <!-- Related entities -->
+              @if (investigateResult.related.users.length || investigateResult.related.hosts.length ||
+                   investigateResult.related.ips.length || investigateResult.related.domains.length) {
+                <div class="exp-section">
+                  <div class="exp-label">Related entities</div>
+                  <div class="related-grid">
+                    @if (investigateResult.related.users.length) {
+                      <div class="related-group">
+                        <span class="related-type"><mat-icon>person</mat-icon> Users</span>
+                        <div class="exp-chips">
+                          @for (u of investigateResult.related.users; track u) {
+                            <span class="group-chip" (click)="startInvestigate('user', u, $event)">{{ u }}</span>
+                          }
+                        </div>
+                      </div>
+                    }
+                    @if (investigateResult.related.hosts.length) {
+                      <div class="related-group">
+                        <span class="related-type"><mat-icon>computer</mat-icon> Hosts</span>
+                        <div class="exp-chips">
+                          @for (h of investigateResult.related.hosts; track h) {
+                            <span class="group-chip" (click)="startInvestigate('host', h, $event)">{{ h }}</span>
+                          }
+                        </div>
+                      </div>
+                    }
+                    @if (investigateResult.related.ips.length) {
+                      <div class="related-group">
+                        <span class="related-type"><mat-icon>router</mat-icon> IPs</span>
+                        <div class="exp-chips">
+                          @for (ip of investigateResult.related.ips; track ip) {
+                            <span class="group-chip" (click)="startInvestigate('ip', ip, $event)">{{ ip }}</span>
+                          }
+                        </div>
+                      </div>
+                    }
+                    @if (investigateResult.related.domains.length) {
+                      <div class="related-group">
+                        <span class="related-type"><mat-icon>language</mat-icon> Domains</span>
+                        <div class="exp-chips">
+                          @for (d of investigateResult.related.domains; track d) {
+                            <span class="group-chip" (click)="startInvestigate('domain', d, $event)">{{ d }}</span>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Recent events -->
+              @if (investigateResult.events.length) {
+                <!-- Severity filter -->
+              <div class="exp-section">
+                <div class="exp-label">Filter events by severity</div>
+                <div class="inv-sev-toggle">
+                  @for (opt of invSeverityOptions; track opt.value) {
+                    <button class="inv-sev-btn"
+                            [class.active]="invSeverity === opt.value"
+                            [class]="'inv-sev-btn sev-btn-' + (opt.value | lowercase)"
+                            (click)="invSeverity = opt.value; onInvSeverityChange()">
+                      {{ opt.label }}
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div class="exp-section">
+                  <div class="exp-label">
+                    {{ investigateResult.events.length | number }} of {{ investigateResult.summary.total | number }} event{{ investigateResult.summary.total === 1 ? '' : 's' }} loaded
+                    @if (invSeverity) { <span class="sev-filter-badge">· {{ invSeverity }} only</span> }
+                  </div>
+                  <div class="inv-events">
+                    @for (ev of investigateResult.events; track ev.event_id) {
+                      <div class="inv-event-row"
+                           [class.inv-row-open]="invExpandedEvents.has(ev.event_id)"
+                           (click)="toggleInvEvent(ev.event_id)">
+                        <span [class]="'badge ' + severityClass(ev.severity)" style="flex-shrink:0">{{ ev.severity }}</span>
+                        @if (ev.misp?.hit_count) {
+                          <span class="ioc-row-badge"
+                                [matTooltip]="ev.misp!.hit_count + ' MISP IOC match' + (ev.misp!.hit_count === 1 ? '' : 'es')">
+                            <mat-icon>gpp_bad</mat-icon>IOC
+                          </span>
+                        }
+                        <span class="inv-ev-time">{{ ev.time | date:'MM/dd HH:mm' }}</span>
+                        <span class="inv-ev-src">{{ ev.source }}</span>
+                        <span class="inv-ev-summary">{{ ev.summary }}</span>
+                        <mat-icon class="inv-row-chevron">{{ invExpandedEvents.has(ev.event_id) ? 'expand_less' : 'chevron_right' }}</mat-icon>
+                      </div>
+                      @if (invExpandedEvents.has(ev.event_id)) {
+                        <div class="inv-event-detail">
+                          @for (entry of invRawEntries(ev); track entry.key) {
+                            <div class="inv-det-row">
+                              <span class="inv-det-key">{{ entry.key }}</span>
+                              <span class="inv-det-val">{{ entry.val }}</span>
+                            </div>
+                          }
+                          @if (!invRawEntries(ev).length) {
+                            <span class="inv-det-empty">No additional fields</span>
+                          }
+                        </div>
+                      }
+                    }
+                    @if (investigateResult.events.length < investigateResult.summary.total) {
+                      <button class="inv-more-btn" (click)="loadMoreEvents()" [disabled]="loadingMore">
+                        @if (loadingMore) {
+                          <mat-icon>hourglass_top</mat-icon> Loading…
+                        } @else {
+                          <mat-icon>expand_more</mat-icon>
+                          Load next 100
+                          ({{ investigateResult.summary.total - investigateResult.events.length | number }} remaining)
+                        }
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+
+            </div>
+          }
+
+          <!-- MISP / IOC details -->
+          @if (row.misp?.hit_count) {
+            <div class="exp-section ioc-section">
+              <div class="exp-label ioc-exp-label">
+                <mat-icon>gpp_bad</mat-icon>
+                MISP IOC Matches
+                <span class="ioc-hit-count-badge">{{ row.misp!.hit_count }}</span>
+                @if (row.misp!.severity_boost > 0) {
+                  <span class="ioc-boost-badge">+{{ row.misp!.severity_boost }} severity boost</span>
+                }
+              </div>
+
+              <!-- IOCs that were checked -->
+              <div class="ioc-checked-strip">
+                @for (entry of iocCheckedList(row.misp!); track entry.type) {
+                  <div class="ioc-checked-chip">
+                    <mat-icon class="ioc-chip-icon">{{ iocTypeIcon(entry.type) }}</mat-icon>
+                    <span class="ioc-chip-type">{{ entry.type | uppercase }}</span>
+                    <span class="ioc-chip-vals">{{ entry.values.join(', ') }}</span>
+                  </div>
+                }
+              </div>
+
+              <!-- Individual hits -->
+              @for (hit of row.misp!.hits; track hit.event_uuid) {
+                <div class="ioc-hit-card">
+                  <div class="ioc-hit-top">
+                    <span class="ioc-hit-value">{{ hit.ioc_value }}</span>
+                    <span class="ioc-type-chip ioc-type-{{ hit.ioc_type }}">{{ hit.ioc_type }}</span>
+                    <span class="ioc-hit-org">{{ hit.org }}</span>
+                    <span class="ioc-hit-date">{{ hit.date }}</span>
+                  </div>
+                  <div class="ioc-hit-name">{{ hit.event_name }}</div>
+                  @if (hit.tags.length) {
+                    <div class="ioc-tags">
+                      @for (tag of hit.tags; track tag) {
+                        <span class="ioc-tag">{{ tag }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Raw fields -->
+          @if (objectEntries(row.raw).length) {
+            <div class="exp-section">
+              <div class="exp-label">Raw data</div>
+              <div class="exp-data-grid">
+                @for (f of objectEntries(row.raw); track f.key) {
+                  <span class="data-key">{{ f.key }}</span>
+                  <span class="data-val">{{ f.val }}</span>
+                }
+              </div>
+            </div>
+          }
+
+        </div>
+      }
+
+    }
+  </div>
+
+  <mat-paginator
+    [length]="total"
+    [pageSize]="pageSize"
+    [pageIndex]="pageIndex"
+    [pageSizeOptions]="pageSizeOptions"
+    (page)="onPage($event)"
+    showFirstLastButtons>
+  </mat-paginator>
+
+</div>

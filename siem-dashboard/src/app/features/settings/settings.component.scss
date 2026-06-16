@@ -1,0 +1,214 @@
+.settings-container { max-width: 1200px; }
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+
+  h1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.config-summary {
+  font-size: 13px;
+  color: var(--siem-text-secondary);
+  background: var(--siem-surface-elevated);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--siem-border);
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 48px;
+  justify-content: center;
+  color: var(--siem-text-secondary);
+}
+
+.integrations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.integration-card {
+  background: var(--siem-surface) !important;
+  border: 1px solid var(--siem-border) !important;
+  border-radius: 8px !important;
+  transition: border-color 0.2s;
+
+  &.is-configured {
+    border-color: rgba(63, 185, 80, 0.25) !important;
+  }
+
+  mat-card-content { padding: 16px !important; }
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.integration-icon {
+  font-size: 28px;
+  width: 28px;
+  height: 28px;
+  color: var(--siem-text-secondary);
+
+  &.configured-icon { color: var(--siem-low); }
+}
+
+.integration-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--siem-text-primary);
+}
+
+.integration-desc {
+  font-size: 12px;
+  color: var(--siem-text-secondary);
+  margin-top: 2px;
+}
+
+mat-divider { margin: 12px 0 !important; }
+
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.test-result {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+
+  &.connected { color: var(--siem-low); }
+  &.error { color: var(--siem-critical); cursor: help; }
+}
+
+.cred-panel {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 1px solid var(--siem-border);
+  border-radius: 6px !important;
+  margin-top: 8px;
+
+  .mat-expansion-panel-header {
+    background: var(--siem-surface-elevated) !important;
+    border-radius: 6px !important;
+    height: 44px !important;
+    padding: 0 12px !important;
+  }
+
+  mat-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--siem-text-secondary);
+
+    mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  }
+}
+
+.cred-form {
+  padding: 12px 4px 4px;
+
+  .full-width { width: 100%; }
+}
+
+.field-ok {
+  color: var(--siem-low);
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.cred-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.azure-note-card {
+  background: var(--siem-surface) !important;
+  border: 1px solid var(--siem-border) !important;
+
+  mat-card-content { padding: 16px !important; }
+}
+
+.azure-note-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  mat-icon { font-size: 28px; width: 28px; height: 28px; color: var(--siem-info); }
+}
+
+.note-text {
+  font-size: 13px;
+  color: var(--siem-text-secondary);
+  margin: 0 0 10px;
+
+  code {
+    background: var(--siem-surface-elevated);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--siem-info);
+  }
+}
+
+.env-snippet {
+  display: block;
+  background: var(--siem-surface-elevated);
+  border: 1px solid var(--siem-border);
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--siem-low);
+  font-family: monospace;
+}

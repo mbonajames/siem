@@ -1,0 +1,407 @@
+<div class="email-page">
+
+  <!-- ── Page header ── -->
+  <div class="page-header">
+    <div class="header-left">
+      <mat-icon class="header-icon">mark_email_unread</mat-icon>
+      <div>
+        <div class="page-title">Email Security Investigation</div>
+        <div class="page-sub">MS Graph · Advanced Hunting · Threat Explorer</div>
+      </div>
+    </div>
+    <div class="header-tabs">
+      <button class="tab-btn" [class.active]="activeTab === 'list'" (click)="activeTab = 'list'">
+        <mat-icon>inbox</mat-icon> Threat Explorer
+      </button>
+      <button class="tab-btn" [class.active]="activeTab === 'hunt'" (click)="activeTab = 'hunt'">
+        <mat-icon>manage_search</mat-icon> Advanced Hunting
+      </button>
+    </div>
+    <div class="header-right">
+      <button class="btn-icon" (click)="showFilterBar = !showFilterBar" title="Toggle filters">
+        <mat-icon>filter_list</mat-icon>
+      </button>
+      <button class="btn-refresh" (click)="loadAll()">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Stat tiles ── -->
+  <div class="stat-row">
+    <div class="stat-tile" (click)="filterInputs.threat_type = ''; applyFilters()">
+      <div class="tile-label">Total Threats</div>
+      <div class="tile-val orange">{{ stats.Total }}</div>
+    </div>
+    <div class="stat-tile" (click)="filterInputs.threat_type = 'Phish'; applyFilters()">
+      <div class="tile-label">Phishing</div>
+      <div class="tile-val crit">{{ stats.Phishing }}</div>
+    </div>
+    <div class="stat-tile" (click)="filterInputs.threat_type = 'Malware'; applyFilters()">
+      <div class="tile-label">Malware</div>
+      <div class="tile-val high">{{ stats.Malware }}</div>
+    </div>
+    <div class="stat-tile" (click)="filterInputs.threat_type = 'Spam'; applyFilters()">
+      <div class="tile-label">Spam</div>
+      <div class="tile-val med">{{ stats.Spam }}</div>
+    </div>
+    <div class="stat-tile" (click)="filterInputs.threat_type = 'BusinessEmailCompromise'; applyFilters()">
+      <div class="tile-label">BEC</div>
+      <div class="tile-val purple">{{ stats.BEC }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="tile-label">Blocked</div>
+      <div class="tile-val ok">{{ stats.Blocked }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="tile-label">Quarantined</div>
+      <div class="tile-val info">{{ stats.Quarantined }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="tile-label">Delivered</div>
+      <div class="tile-val muted">{{ stats.Delivered }}</div>
+    </div>
+  </div>
+
+  <!-- ── THREAT EXPLORER TAB ── -->
+  @if (activeTab === 'list') {
+
+    <!-- Filter bar -->
+    @if (showFilterBar) {
+      <div class="filter-bar">
+        <input class="f-input" [(ngModel)]="filterInputs.sender"          placeholder="Sender address" />
+        <input class="f-input" [(ngModel)]="filterInputs.recipient"       placeholder="Recipient address" />
+        <input class="f-input" [(ngModel)]="filterInputs.subject"         placeholder="Subject contains…" />
+        <select class="f-select" [(ngModel)]="filterInputs.threat_type">
+          <option value="">All threats</option>
+          <option value="Phish">Phishing</option>
+          <option value="Malware">Malware</option>
+          <option value="Spam">Spam</option>
+          <option value="BusinessEmailCompromise">BEC</option>
+        </select>
+        <select class="f-select" [(ngModel)]="filterInputs.delivery_action">
+          <option value="">Any delivery</option>
+          <option value="Delivered">Delivered</option>
+          <option value="Blocked">Blocked</option>
+          <option value="Quarantined">Quarantined</option>
+          <option value="Replaced">Replaced</option>
+        </select>
+        <select class="f-select narrow" [(ngModel)]="filterInputs.days">
+          <option [value]="1">24h</option>
+          <option [value]="7">7d</option>
+          <option [value]="14">14d</option>
+          <option [value]="30">30d</option>
+        </select>
+        <button class="btn-apply" (click)="applyFilters()">
+          <mat-icon>search</mat-icon> Search
+        </button>
+        <button class="btn-clear" (click)="clearFilters()">
+          <mat-icon>clear</mat-icon>
+        </button>
+      </div>
+    }
+
+    <!-- Main panel: list + detail -->
+    <div class="main-panels" [class.detail-open]="!!selectedEmail">
+
+      <!-- Email list -->
+      <div class="card list-card">
+        <div class="card-head">
+          <span>Emails</span>
+          <span class="result-count">{{ emails.length }} results</span>
+          @if (loading) { <span class="spin-dot"></span> }
+        </div>
+
+        @if (!loading && emails.length === 0) {
+          <div class="empty-state">
+            <mat-icon>search_off</mat-icon>
+            <span>No emails matched. Adjust filters or check API connectivity.</span>
+          </div>
+        }
+
+        <div class="email-table-wrap">
+          <table class="email-table">
+            <thead>
+              <tr>
+                <th>Threat</th>
+                <th>Sender</th>
+                <th>Subject</th>
+                <th>Recipient</th>
+                <th>Delivery</th>
+                <th>Date</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (em of emails; track em.NetworkMessageId) {
+                <tr [class.row-selected]="selectedEmail?.NetworkMessageId === em.NetworkMessageId"
+                    (click)="selectEmail(em)">
+                  <td>
+                    <span class="threat-pill" [ngClass]="getThreatClass(em.ThreatTypes)">
+                      {{ getThreatLabel(em.ThreatTypes) }}
+                    </span>
+                  </td>
+                  <td class="cell-sender">
+                    <div class="sender-name">{{ em.SenderDisplayName || em.SenderFromAddress }}</div>
+                    <div class="sender-addr">{{ em.SenderFromAddress }}</div>
+                  </td>
+                  <td class="cell-subject">{{ em.Subject }}</td>
+                  <td class="cell-recipient">{{ em.RecipientEmailAddress }}</td>
+                  <td>
+                    <span class="del-badge" [ngClass]="getDeliveryClass(em.DeliveryAction)">
+                      {{ em.DeliveryAction }}
+                    </span>
+                  </td>
+                  <td class="cell-date">{{ formatDate(em.Timestamp) }}</td>
+                  <td class="cell-actions" (click)="$event.stopPropagation()">
+                    <button class="act-icon" title="Quarantine" (click)="openAction(em, 'quarantine')">
+                      <mat-icon>lock</mat-icon>
+                    </button>
+                    <button class="act-icon del" title="Soft delete" (click)="openAction(em, 'soft_delete')">
+                      <mat-icon>delete_outline</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Detail panel -->
+      @if (selectedEmail) {
+        <div class="card detail-card">
+          <div class="detail-top">
+            <div class="detail-subject">{{ selectedEmail.Subject }}</div>
+            <button class="btn-close" (click)="closeDetail()"><mat-icon>close</mat-icon></button>
+          </div>
+
+          <!-- Sender / recipient meta -->
+          <div class="detail-meta-grid">
+            <div class="dm-row">
+              <span class="dm-label">From</span>
+              <span class="dm-val">{{ selectedEmail.SenderDisplayName }} &lt;{{ selectedEmail.SenderFromAddress }}&gt;</span>
+            </div>
+            <div class="dm-row">
+              <span class="dm-label">To</span>
+              <span class="dm-val">{{ selectedEmail.RecipientEmailAddress }}</span>
+            </div>
+            <div class="dm-row">
+              <span class="dm-label">Date</span>
+              <span class="dm-val">{{ formatDate(selectedEmail.Timestamp) }}</span>
+            </div>
+            <div class="dm-row">
+              <span class="dm-label">Sender IP</span>
+              <span class="dm-val mono">{{ selectedEmail.SenderIPv4 || '—' }}</span>
+            </div>
+            <div class="dm-row">
+              <span class="dm-label">Message ID</span>
+              <span class="dm-val mono small">{{ selectedEmail.InternetMessageId }}</span>
+            </div>
+          </div>
+
+          <!-- Threat + Delivery -->
+          <div class="detail-badges">
+            <span class="threat-pill lg" [ngClass]="getThreatClass(selectedEmail.ThreatTypes)">
+              <mat-icon class="pill-icon">warning</mat-icon>
+              {{ getThreatLabel(selectedEmail.ThreatTypes) }}
+            </span>
+            <span class="del-badge lg" [ngClass]="getDeliveryClass(selectedEmail.DeliveryAction)">
+              {{ selectedEmail.DeliveryAction }}
+            </span>
+            @if (selectedEmail.DeliveryLocation) {
+              <span class="loc-badge">{{ selectedEmail.DeliveryLocation }}</span>
+            }
+          </div>
+
+          <!-- Auth results -->
+          <div class="section-label">Authentication</div>
+          <div class="auth-row">
+            @for (key of ['SPF', 'DKIM', 'DMARC']; track key) {
+              <div class="auth-chip">
+                <div class="auth-key">{{ key }}</div>
+                <div class="auth-val" [ngClass]="authClass(getAuthResult(selectedEmail.AuthenticationDetails, key))">
+                  {{ getAuthResult(selectedEmail.AuthenticationDetails, key) }}
+                </div>
+              </div>
+            }
+            <div class="auth-chip">
+              <div class="auth-key">URLs</div>
+              <div class="auth-val">{{ selectedEmail.UrlCount }}</div>
+            </div>
+            <div class="auth-chip">
+              <div class="auth-key">Attachments</div>
+              <div class="auth-val">{{ selectedEmail.AttachmentCount }}</div>
+            </div>
+          </div>
+
+          @if (detailLoading) {
+            <div class="detail-loading">
+              <span class="spin-dot"></span> Loading URLs &amp; attachments…
+            </div>
+          }
+
+          @if (detail && !detailLoading) {
+            <!-- URLs -->
+            @if (detail.urls.length > 0) {
+              <div class="section-label">URLs ({{ detail.urls.length }})</div>
+              <div class="url-list">
+                @for (u of detail.urls; track u.Url) {
+                  <div class="url-row" [class.url-threat]="isUrlThreat(u)">
+                    <div class="url-domain">{{ u.UrlDomain }}</div>
+                    <div class="url-full">{{ u.Url }}</div>
+                    @if (u.ThreatTypes) {
+                      <span class="url-threat-pill">{{ u.ThreatTypes }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Attachments -->
+            @if (detail.attachments.length > 0) {
+              <div class="section-label">Attachments ({{ detail.attachments.length }})</div>
+              <div class="att-list">
+                @for (a of detail.attachments; track a.SHA256) {
+                  <div class="att-row" [class.att-threat]="a.ThreatTypes">
+                    <mat-icon class="att-icon">attach_file</mat-icon>
+                    <div class="att-info">
+                      <div class="att-name">{{ a.FileName }}</div>
+                      <div class="att-meta">{{ a.FileType }} · {{ a.FileSize | number }} bytes</div>
+                      @if (a.ThreatTypes) {
+                        <div class="att-threat-label">{{ a.ThreatTypes }}</div>
+                      }
+                      <div class="att-hash">{{ a.SHA256 }}</div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Post-delivery events -->
+            @if (detail.post_delivery.length > 0) {
+              <div class="section-label">Post-Delivery Events</div>
+              <div class="post-list">
+                @for (p of detail.post_delivery; track p.Timestamp) {
+                  <div class="post-row">
+                    <mat-icon class="post-icon">history</mat-icon>
+                    <div>
+                      <div class="post-action">{{ p.ActionType }} · {{ p.ActionResult }}</div>
+                      <div class="post-meta">{{ p.ActionTrigger }} · {{ formatDate(p.Timestamp) }}</div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          }
+
+          <!-- Remediation actions -->
+          <div class="section-label">Remediation</div>
+          <div class="action-row">
+            <button class="rem-btn quarantine" (click)="openAction(selectedEmail, 'quarantine')">
+              <mat-icon>lock</mat-icon> Quarantine
+            </button>
+            <button class="rem-btn soft-del" (click)="openAction(selectedEmail, 'soft_delete')">
+              <mat-icon>delete_outline</mat-icon> Soft Delete
+            </button>
+            <button class="rem-btn hard-del" (click)="openAction(selectedEmail, 'hard_delete')">
+              <mat-icon>delete_forever</mat-icon> Hard Delete
+            </button>
+            <button class="rem-btn inbox" (click)="openAction(selectedEmail, 'move_inbox')">
+              <mat-icon>move_to_inbox</mat-icon> Move to Inbox
+            </button>
+            <button class="rem-btn junk" (click)="openAction(selectedEmail, 'move_junk')">
+              <mat-icon>report</mat-icon> Move to Junk
+            </button>
+          </div>
+        </div>
+      }
+
+    </div>
+  }
+
+  <!-- ── ADVANCED HUNTING TAB ── -->
+  @if (activeTab === 'hunt') {
+    <div class="hunt-panel">
+      <div class="hunt-editor-wrap">
+        <div class="hunt-label">KQL Query</div>
+        <textarea class="hunt-editor" [(ngModel)]="huntQuery" rows="10" spellcheck="false"></textarea>
+        <div class="hunt-actions">
+          <button class="btn-run" (click)="runHunt()" [disabled]="huntLoading">
+            <mat-icon>{{ huntLoading ? 'hourglass_top' : 'play_arrow' }}</mat-icon>
+            {{ huntLoading ? 'Running…' : 'Run Query' }}
+          </button>
+          <span class="hunt-hint">Uses Microsoft Graph <code>runHuntingQuery</code> — EmailEvents, EmailUrlInfo, EmailAttachmentInfo</span>
+        </div>
+      </div>
+
+      @if (huntError) {
+        <div class="hunt-error"><mat-icon>error</mat-icon> {{ huntError }}</div>
+      }
+
+      @if (huntResults !== null && !huntLoading) {
+        <div class="hunt-results-wrap">
+          <div class="hunt-results-head">
+            {{ huntResults.length }} rows returned
+          </div>
+          <div class="hunt-table-scroll">
+            <table class="hunt-table">
+              <thead>
+                <tr>
+                  @for (col of huntColumns; track col) {
+                    <th>{{ col }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of huntResults; track $index) {
+                  <tr>
+                    @for (col of huntColumns; track col) {
+                      <td>{{ row[col] }}</td>
+                    }
+                  </tr>
+                }
+                @if (huntResults.length === 0) {
+                  <tr><td [attr.colspan]="huntColumns.length || 1" class="no-results">No results</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ── Action confirmation modal ── -->
+  @if (actionModal) {
+    <div class="modal-backdrop" (click)="actionModal = null">
+      <div class="modal-box" (click)="$event.stopPropagation()">
+        <div class="modal-title">Confirm Action</div>
+        <div class="modal-body">
+          <p>Action: <strong>{{ actionModal.action.replace('_', ' ') | titlecase }}</strong></p>
+          <p class="modal-subject">{{ actionModal.email.Subject }}</p>
+          <div class="modal-field">
+            <label>Recipient mailbox (user ID / UPN)</label>
+            <input [(ngModel)]="actionUserId" placeholder="user@example.com" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" (click)="actionModal = null">Cancel</button>
+          <button class="btn-confirm" (click)="confirmAction()" [disabled]="!actionUserId || actionLoading">
+            <mat-icon>check</mat-icon>
+            {{ actionLoading ? 'Applying…' : 'Confirm' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ── Toast ── -->
+  @if (toast) {
+    <div class="email-toast" [class.toast-err]="toast.type === 'err'" [class.toast-warn]="toast.type === 'warn'">
+      <mat-icon>{{ toast.type === 'ok' ? 'check_circle' : toast.type === 'warn' ? 'warning' : 'error' }}</mat-icon>
+      {{ toast.msg }}
+    </div>
+  }
+
+</div>

@@ -1,0 +1,121 @@
+.cd-page { display: flex; flex-direction: column; gap: 16px; }
+
+// ── Header ────────────────────────────────────────────────────────────────────
+.cd-header {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+
+.cd-header-left {
+  display: flex; align-items: center; gap: 10px;
+  h1 { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; margin: 0; }
+  mat-icon { color: #58a6ff; }
+}
+
+.cd-count {
+  font-size: 12px; padding: 2px 8px; border-radius: 10px;
+  background: var(--siem-surface-elevated); border: 1px solid var(--siem-border);
+  color: var(--siem-text-secondary);
+}
+
+// ── Buttons ───────────────────────────────────────────────────────────────────
+.cd-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer; border: 1px solid var(--siem-border);
+  background: var(--siem-surface-elevated); color: var(--siem-text-primary); transition: all .15s;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; }
+  &:hover { border-color: #58a6ff; color: #58a6ff; }
+  &.cd-btn-primary { background: #58a6ff; border-color: #58a6ff; color: #fff; &:hover { background: #79c0ff; } }
+  &:disabled { opacity: .5; cursor: not-allowed; }
+}
+
+.cd-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: none; background: none; border-radius: 4px;
+  color: var(--siem-text-secondary); cursor: pointer; transition: background .12s, color .12s;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  &.cd-delete-btn:hover { color: #f85149; background: rgba(218,54,51,.12); }
+}
+
+.spin { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+// ── Create form ───────────────────────────────────────────────────────────────
+.cd-create-form {
+  background: var(--siem-surface); border: 1px solid var(--siem-border); border-radius: 8px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+
+.cd-create-hdr {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 14px; font-weight: 600; color: var(--siem-text-primary);
+}
+
+.cd-input {
+  background: var(--siem-surface-elevated); border: 1px solid var(--siem-border);
+  border-radius: 6px; padding: 8px 12px; color: var(--siem-text-primary);
+  font-size: 14px; font-family: inherit; width: 100%; box-sizing: border-box;
+  &:focus { outline: none; border-color: #58a6ff; }
+  &::placeholder { color: var(--siem-text-secondary); }
+}
+
+.cd-create-actions { display: flex; gap: 8px; }
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+.cd-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 80px 20px; color: var(--siem-text-secondary);
+  mat-icon { font-size: 48px; width: 48px; height: 48px; opacity: .3; }
+  p { font-size: 14px; margin: 0; }
+}
+
+// ── Dashboard card grid ───────────────────────────────────────────────────────
+.cd-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;
+}
+
+.cd-card {
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--siem-surface); border: 1px solid var(--siem-border);
+  border-radius: 8px; padding: 14px; text-decoration: none; color: inherit;
+  transition: border-color .15s, box-shadow .15s; cursor: pointer;
+  &:hover { border-color: #58a6ff; box-shadow: 0 2px 12px rgba(88,166,255,.15); }
+}
+
+.cd-card-hdr { display: flex; align-items: flex-start; gap: 10px; }
+
+.cd-card-icon {
+  font-size: 22px; width: 22px; height: 22px; color: #58a6ff; flex-shrink: 0; margin-top: 1px;
+}
+
+.cd-card-meta { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.cd-card-name {
+  font-size: 14px; font-weight: 600; color: var(--siem-text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.cd-card-shared {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px;
+  background: rgba(63,185,80,.1); color: #3fb950; border: 1px solid rgba(63,185,80,.2);
+  mat-icon { font-size: 10px; width: 10px; height: 10px; }
+}
+
+.cd-card-desc {
+  font-size: 12px; color: var(--siem-text-secondary); margin: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.cd-card-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: var(--siem-text-secondary); margin-top: auto;
+  padding-top: 8px; border-top: 1px solid var(--siem-border);
+}
+
+.cd-card-widgets {
+  display: flex; align-items: center; gap: 3px;
+  mat-icon { font-size: 12px; width: 12px; height: 12px; }
+}
+
+.cd-card-time { font-family: monospace; }

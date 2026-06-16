@@ -1,0 +1,151 @@
+<div class="dv-container">
+
+  @if (loading) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+  @if (dashboard) {
+
+    <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+    <div class="dv-toolbar">
+      <a routerLink="/my-dashboards" class="dv-back">
+        <mat-icon>arrow_back</mat-icon>
+      </a>
+
+      @if (editMode) {
+        <input class="dv-name-input" [(ngModel)]="renamingName" placeholder="Dashboard name" />
+      } @else {
+        <h1 class="dv-title">{{ dashboard.name }}</h1>
+        @if (dashboard.shared) {
+          <span class="dv-shared-badge"><mat-icon>public</mat-icon> Shared</span>
+        }
+      }
+
+      <!-- Global time range — always visible -->
+      <div class="dv-time-range">
+        <mat-icon>schedule</mat-icon>
+        <select class="dv-hours-select" [(ngModel)]="globalHours">
+          <option [ngValue]="1">Last 1h</option>
+          <option [ngValue]="24">Last 24h</option>
+          <option [ngValue]="168">Last 7d</option>
+          <option [ngValue]="720">Last 30d</option>
+        </select>
+      </div>
+
+      <div class="dv-toolbar-actions">
+        @if (editMode) {
+          <!-- Widget catalog toggle -->
+          <button class="dv-btn" (click)="showCatalog = !showCatalog">
+            <mat-icon>add_circle_outline</mat-icon>
+            Add widget
+          </button>
+          <button class="dv-btn dv-btn-save" [disabled]="saving" (click)="save()">
+            @if (saving) { <mat-icon class="spin">sync</mat-icon> }
+            @else         { <mat-icon>save</mat-icon> }
+            Save
+          </button>
+          <button class="dv-btn dv-btn-ghost" (click)="cancelEdit()">Cancel</button>
+        } @else {
+          <!-- Share toggle -->
+          <button class="dv-btn" [class.active]="dashboard.shared" (click)="toggleShare()"
+                  [matTooltip]="dashboard.shared ? 'Click to make private' : 'Share with all users'">
+            <mat-icon>{{ dashboard.shared ? 'public' : 'public_off' }}</mat-icon>
+            {{ dashboard.shared ? 'Shared' : 'Share' }}
+          </button>
+          <button class="dv-btn" (click)="exportPdf()" matTooltip="Export as PDF">
+            <mat-icon>picture_as_pdf</mat-icon> Export
+          </button>
+          <button class="dv-btn dv-btn-primary" (click)="toggleEdit()">
+            <mat-icon>edit</mat-icon> Edit
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- ── Edit mode: widget catalog panel ───────────────────────────────── -->
+    @if (editMode && showCatalog) {
+      <div class="dv-catalog">
+        <div class="dv-catalog-hdr">
+          <span>Add a visualization</span>
+          <button class="wgt-icon-btn" (click)="showCatalog = false"><mat-icon>close</mat-icon></button>
+        </div>
+        <div class="dv-catalog-grid">
+          @for (item of catalog; track item.type) {
+            <button class="dv-catalog-item" (click)="addWidget(item.type); showCatalog = false">
+              <mat-icon class="ci-icon">{{ item.icon }}</mat-icon>
+              <div class="ci-label">{{ item.label }}</div>
+              <div class="ci-desc">{{ item.description }}</div>
+            </button>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- ── Widget grid ─────────────────────────────────────────────────────── -->
+    @if (dashboard.widgets.length === 0) {
+      <div class="dv-empty">
+        <mat-icon>dashboard_customize</mat-icon>
+        <p>No widgets yet.</p>
+        @if (editMode) {
+          <button class="dv-btn dv-btn-primary" (click)="showCatalog = true">
+            <mat-icon>add</mat-icon> Add your first widget
+          </button>
+        } @else {
+          <button class="dv-btn" (click)="toggleEdit()">
+            <mat-icon>edit</mat-icon> Edit dashboard
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="dv-grid"
+           cdkDropList
+           [cdkDropListDisabled]="!editMode"
+           (cdkDropListDropped)="onDrop($event)">
+
+        @for (widget of dashboard.widgets; track widget.id) {
+          <div class="dv-widget-wrap {{ widgetSizeClass(widget) }}"
+               [style.height]="widgetHeight(widget)"
+               #wrapEl
+               cdkDrag
+               [cdkDragDisabled]="!editMode">
+
+            <!-- Drag placeholder -->
+            <div class="dv-drag-placeholder" *cdkDragPlaceholder></div>
+
+            <!-- Controls in edit mode: title + size -->
+            @if (editMode) {
+              <div class="dv-widget-controls">
+                <input class="wgt-title-input" [(ngModel)]="widget.title" placeholder="Label…" />
+                @if (widget.type !== 'divider' && widget.type !== 'text') {
+                  <select class="wgt-mini-select"
+                          [value]="widget.size"
+                          (change)="setWidgetSize(widget, $any($event.target).value)">
+                    @for (s of sizeOptions; track s.value) {
+                      <option [value]="s.value">{{ s.label }}</option>
+                    }
+                  </select>
+                }
+              </div>
+            }
+
+            <app-widget
+              [widget]="widget"
+              [hours]="globalHours"
+              [editMode]="editMode"
+              [isOwner]="isOwner"
+              (removed)="removeWidget($event)">
+            </app-widget>
+
+            @if (editMode && widget.type !== 'divider' && widget.type !== 'text') {
+              <div class="dv-resize-handle"
+                   (mousedown)="startResize($event, widget, wrapEl)"
+                   title="Drag to resize">
+              </div>
+            }
+
+          </div>
+        }
+      </div>
+    }
+
+  }
+
+</div>

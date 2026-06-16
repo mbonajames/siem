@@ -1,0 +1,236 @@
+<div class="tk-page">
+
+  <!-- Header -->
+  <div class="tk-header">
+    <div class="tk-header-left">
+      <mat-icon class="tk-header-icon">confirmation_number</mat-icon>
+      <div>
+        <div class="tk-title">Jira Tickets</div>
+        <div class="tk-sub">View, create and track security incidents</div>
+      </div>
+    </div>
+    <div class="tk-header-right">
+      <button class="btn-refresh" (click)="load()"><mat-icon>refresh</mat-icon> Refresh</button>
+      <button class="btn-new" (click)="showForm = !showForm">
+        <mat-icon>{{ showForm ? 'close' : 'add' }}</mat-icon>
+        {{ showForm ? 'Cancel' : 'New Ticket' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Stat tiles -->
+  <div class="tk-tiles">
+    <div class="tk-tile"><div class="tile-lbl">Open</div><div class="tile-val st-open-val">{{ stats.open }}</div></div>
+    <div class="tk-tile"><div class="tile-lbl">In Progress</div><div class="tile-val st-prog-val">{{ stats.inProgress }}</div></div>
+    <div class="tk-tile"><div class="tile-lbl">Done</div><div class="tile-val st-done-val">{{ stats.done }}</div></div>
+    <div class="tk-tile"><div class="tile-lbl">Critical</div><div class="tile-val pri-critical-val">{{ stats.critical }}</div></div>
+  </div>
+
+  <!-- Auto-ticket banner -->
+  @if (autoStatus) {
+    <div class="auto-banner">
+      <div class="auto-banner-left">
+        <mat-icon class="auto-icon">smart_toy</mat-icon>
+        <div>
+          <div class="auto-title">Auto-ticketing <span class="auto-active">active</span></div>
+          <div class="auto-meta">
+            Monitors Wazuh critical alerts (level ≥ 12) every 5 min ·
+            {{ autoStatus.total_ever ?? 0 }} tickets created total
+            @if (autoStatus.last_run) { · Last run: {{ formatDate(autoStatus.last_run) }} }
+            @if (autoStatus.last_error) { · <span class="auto-err">{{ autoStatus.last_error }}</span> }
+          </div>
+        </div>
+      </div>
+      <button class="btn-run-auto" (click)="triggerAutoTicket()" [disabled]="autoStatus.running">
+        <mat-icon>{{ autoStatus.running ? 'hourglass_top' : 'play_arrow' }}</mat-icon>
+        {{ autoStatus.running ? 'Running…' : 'Run Now' }}
+      </button>
+    </div>
+
+    @if (autoStatus.recent_tickets?.length) {
+      <div class="auto-recent-card">
+        <div class="arc-head"><mat-icon>history</mat-icon> Recent auto-created tickets</div>
+        <div class="arc-list">
+          @for (t of autoStatus.recent_tickets; track t.ticket_key) {
+            <div class="arc-row">
+              <span class="arc-key">{{ t.ticket_key }}</span>
+              <span class="arc-lvl pri-critical">L{{ t.rule_level }}</span>
+              <span class="arc-sum">{{ t.alert_summary }}</span>
+              <span class="arc-agent">{{ t.agent_name }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  <!-- Create ticket form -->
+  @if (showForm) {
+    <div class="tk-form-card">
+      <div class="form-title">Create Ticket</div>
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>Summary *</label>
+          <input [(ngModel)]="form.summary" placeholder="Describe the incident…" />
+        </div>
+        <div class="form-field full">
+          <label>Description</label>
+          <textarea [(ngModel)]="form.description" rows="3" placeholder="Additional details…"></textarea>
+        </div>
+        <div class="form-field">
+          <label>Priority</label>
+          <select [(ngModel)]="form.priority">
+            @for (p of ['Critical','High','Medium','Low']; track p) {
+              <option [value]="p">{{ p }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-cancel" (click)="showForm = false">Cancel</button>
+        <button class="btn-create" (click)="createTicket()"
+                [disabled]="creating || !form.summary.trim()">
+          <mat-icon>{{ creating ? 'hourglass_top' : 'send' }}</mat-icon>
+          {{ creating ? 'Creating…' : 'Create' }}
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- Main panels: list + detail -->
+  <div class="tk-panels">
+
+    <!-- Ticket list -->
+    <div class="tk-card list-card">
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <select [(ngModel)]="selectedStatus" (change)="onFilter()">
+          @for (s of statuses; track s) { <option [value]="s">{{ s || 'All Statuses' }}</option> }
+        </select>
+        <select [(ngModel)]="selectedPriority" (change)="onFilter()">
+          @for (p of priorities; track p) { <option [value]="p">{{ p || 'All Priorities' }}</option> }
+        </select>
+        @if (loading) { <span class="loading-dot"></span> }
+      </div>
+
+      <!-- Rows -->
+      <div class="tk-list">
+        @for (issue of issues; track issue.id) {
+          <div class="tk-row" [class.active]="selectedIssue?.key === issue.key"
+               (click)="selectIssue(issue)">
+            <div class="tk-row-top">
+              <span class="tk-key">{{ issue.key }}</span>
+              @if (isAutoTicket(issue)) { <span class="auto-badge">auto</span> }
+              <span class="tk-summary">{{ issue.fields?.summary }}</span>
+            </div>
+            <div class="tk-row-bot">
+              <span [class]="'badge ' + getStatusClass(issue.fields?.status?.name)">
+                {{ issue.fields?.status?.name }}
+              </span>
+              <span [class]="'badge ' + getPriorityClass(issue.fields?.priority?.name)">
+                {{ issue.fields?.priority?.name }}
+              </span>
+              <span class="tk-date">{{ formatDate(issue.fields?.updated) }}</span>
+            </div>
+          </div>
+        }
+        @if (!loading && issues.length === 0) {
+          <div class="empty-state">
+            <mat-icon>confirmation_number</mat-icon>
+            <span>No tickets found</span>
+          </div>
+        }
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination">
+        <button class="pg-btn" (click)="onPage(-1)" [disabled]="pageIndex === 0">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <span class="pg-info">{{ pageIndex + 1 }} / {{ pages }}</span>
+        <button class="pg-btn" (click)="onPage(1)" [disabled]="(pageIndex + 1) >= pages">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Issue detail -->
+    <div class="tk-card detail-card">
+      @if (!selectedIssue) {
+        <div class="empty-state tall">
+          <mat-icon>manage_search</mat-icon>
+          <span>Select a ticket to view details</span>
+        </div>
+      }
+      @if (selectedIssue) {
+        <div class="detail-header">
+          <div class="dh-top">
+            <span class="tk-key">{{ selectedIssue.key }}</span>
+            @if (isAutoTicket(selectedIssue)) { <span class="auto-badge">auto</span> }
+            <span [class]="'badge ' + getStatusClass(selectedIssue.fields?.status?.name)">
+              {{ selectedIssue.fields?.status?.name }}
+            </span>
+            <span [class]="'badge ' + getPriorityClass(selectedIssue.fields?.priority?.name)">
+              {{ selectedIssue.fields?.priority?.name }}
+            </span>
+            <button class="btn-jira" (click)="openInJira(selectedIssue)" title="Open in Jira">
+              <mat-icon>open_in_new</mat-icon>
+            </button>
+            <button class="btn-close-detail" (click)="selectedIssue = null">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+          <div class="dh-summary">{{ selectedIssue.fields?.summary }}</div>
+          <div class="dh-meta">
+            <span><mat-icon class="mi">person</mat-icon>{{ selectedIssue.fields?.assignee?.displayName ?? 'Unassigned' }}</span>
+            <span><mat-icon class="mi">schedule</mat-icon>{{ formatDate(selectedIssue.fields?.created) }}</span>
+            <span><mat-icon class="mi">update</mat-icon>{{ formatDate(selectedIssue.fields?.updated) }}</span>
+          </div>
+          @if (selectedIssue.fields?.labels?.length) {
+            <div class="dh-labels">
+              @for (l of selectedIssue.fields.labels; track l) {
+                <span class="label-chip">{{ l }}</span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Comments -->
+        <div class="comments-section">
+          <div class="section-lbl">Comments ({{ comments.length }})</div>
+          @if (commentsLoading) { <div class="loading-dot" style="margin:12px 14px"></div> }
+          <div class="comment-list">
+            @for (c of comments; track c.id) {
+              <div class="comment-row">
+                <div class="comment-author">{{ c.author?.displayName ?? 'Unknown' }}</div>
+                <div class="comment-body">{{ commentText(c) }}</div>
+                <div class="comment-date">{{ formatDate(c.created) }}</div>
+              </div>
+            }
+            @if (!commentsLoading && comments.length === 0) {
+              <div class="no-comments">No comments yet</div>
+            }
+          </div>
+          <div class="comment-input-row">
+            <input [(ngModel)]="newComment" placeholder="Add a comment…"
+                   (keydown.enter)="submitComment()" />
+            <button class="btn-comment" (click)="submitComment()"
+                    [disabled]="addingComment || !newComment.trim()">
+              <mat-icon>send</mat-icon>
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+
+  </div>
+
+  <!-- Toast -->
+  @if (toast) {
+    <div class="tk-toast" [class.toast-err]="toast.type === 'err'">
+      <mat-icon>{{ toast.type === 'ok' ? 'check_circle' : 'error' }}</mat-icon>
+      {{ toast.msg }}
+    </div>
+  }
+
+</div>

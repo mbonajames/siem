@@ -1,0 +1,741 @@
+<div class="dash-wrap">
+
+  <!-- TOPBAR -->
+  <div class="dash-topbar">
+    <div class="topbar-left">
+      <div class="live-dot"></div>
+      <span class="estate-badge">SecOps</span>
+      <span class="dash-clock">{{ clockStr }}</span>
+    </div>
+    <div class="topbar-right">
+      <button class="filter-pill" [class.active]="range === '24h'" (click)="setRange('24h')">24h</button>
+      <button class="filter-pill" [class.active]="range === '7d'"  (click)="setRange('7d')">7d</button>
+      <button class="filter-pill" [class.active]="range === '30d'" (click)="setRange('30d')">30d</button>
+      <button class="filter-pill icon-btn" [class.spinning]="loading" (click)="load()" title="Refresh">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  @if (loading) { <mat-progress-bar mode="indeterminate" style="border-radius:4px"></mat-progress-bar> }
+
+  <!-- ── ALERT MANAGEMENT ─────────────────────────────────────────────────── -->
+  <div class="card alert-mgmt-card">
+
+    <!-- Outer header -->
+    <div class="card-hdr alert-mgmt-hdr">
+      <span class="card-title alert-mgmt-title">
+        <mat-icon class="ci" style="color:#da3633;font-size:16px;width:16px;height:16px">notifications_active</mat-icon>
+        Alert Management
+      </span>
+      <div class="hdr-filters">
+        <span class="range-label">{{ range }}</span>
+        <a routerLink="/alerts" class="hdr-link">View all →</a>
+      </div>
+    </div>
+
+    <div class="alert-mgmt-body">
+
+    <!-- SECTION 1 — Severity summary -->
+    <div class="inner-section">
+      <div class="inner-section-hdr">
+        <!-- <mat-icon style="color:#7F77DD">hub</mat-icon> -->
+        <span>Last [{{ range }}]</span>
+        <a routerLink="/alerts" class="hdr-link" style="margin-left:auto">View all alerts →</a>
+      </div>
+
+      <div class="stat-tiles">
+        <a class="stat-tile stat-tile-link"
+           routerLink="/alerts" [queryParams]="{hours: currentHours}">
+          <div class="tile-label">Total</div>
+          <div class="tile-val orange">{{ stats.total }}</div>
+          <div class="tile-sub">events</div>
+        </a>
+        <a class="stat-tile stat-tile-link stat-tile-crit"
+           routerLink="/alerts" [queryParams]="{severity: 'Critical', hours: currentHours}">
+          <div class="tile-label">Critical</div>
+          <div class="tile-val crit">{{ stats.critical }}</div>
+          <div class="tile-sub crit">immediate action</div>
+        </a>
+        <a class="stat-tile stat-tile-link stat-tile-high"
+           routerLink="/alerts" [queryParams]="{severity: 'High', hours: currentHours}">
+          <div class="tile-label">High</div>
+          <div class="tile-val high">{{ stats.high }}</div>
+          <div class="tile-sub">priority review</div>
+        </a>
+        <a class="stat-tile stat-tile-link stat-tile-med"
+           routerLink="/alerts" [queryParams]="{severity: 'Medium', hours: currentHours}">
+          <div class="tile-label">Medium</div>
+          <div class="tile-val med">{{ stats.medium }}</div>
+          <div class="tile-sub">investigate</div>
+        </a>
+        <a class="stat-tile stat-tile-link stat-tile-low"
+           routerLink="/alerts" [queryParams]="{severity: 'Low', hours: currentHours}">
+          <div class="tile-label">Low</div>
+          <div class="tile-val low">{{ stats.low }}</div>
+          <div class="tile-sub">informational</div>
+        </a>
+        <a class="stat-tile stat-tile-link stat-tile-ioc"
+           routerLink="/alerts" [queryParams]="{ioc_only: 'true', hours: currentHours}"
+           matTooltip="View alerts with MISP IOC matches">
+          <div class="tile-label ioc-tile-label">
+            <mat-icon>gpp_bad</mat-icon> IOC Alerts
+          </div>
+          <div class="tile-val ioc">{{ stats.iocCount }}</div>
+          <div class="tile-sub ioc">MISP matches</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- SECTION 2 — Distribution + entities -->
+    <div class="inner-section">
+      <div class="inner-section-hdr">
+        <mat-icon style="color:#F46A1F">donut_large</mat-icon>
+        <span>Event distribution &amp; top entities</span>
+      </div>
+      <div class="breakdown-cols four-cols">
+
+      <!-- By source -->
+      <div class="breakdown-section">
+        <div class="breakdown-label">
+          <mat-icon style="font-size:13px;width:13px;height:13px;color:#F46A1F">devices_other</mat-icon>
+          By source
+        </div>
+        @if (sourceItems.length === 0) {
+          <div class="empty-msg">No data</div>
+        } @else {
+          @let srcSlices = getPieSlices(sourceItems);
+          <div class="pie-container">
+            <svg viewBox="0 0 100 100" class="pie-svg">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="var(--siem-surface-elevated)" stroke-width="18"/>
+              @for (seg of srcSlices; track seg.label) {
+                <circle cx="50" cy="50" r="40" fill="none"
+                        [attr.stroke]="seg.color" stroke-width="18"
+                        [attr.stroke-dasharray]="seg.dash + ' ' + PIE_C"
+                        [attr.stroke-dashoffset]="seg.offset"
+                        transform="rotate(-90 50 50)"/>
+              }
+              <text x="50" y="47" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">{{ sourceItems.length }}</text>
+              <text x="50" y="58" text-anchor="middle" fill="#8b949e" font-size="7">sources</text>
+            </svg>
+            <div class="pie-legend">
+              @for (seg of srcSlices; track seg.label) {
+                <div class="legend-item">
+                  <span class="legend-dot" [style.background]="seg.color"></span>
+                  <span class="legend-label" [title]="seg.label">{{ seg.label }}</span>
+                  <span class="legend-count">{{ seg.val }}</span>
+                  <span class="legend-pct">{{ seg.pct }}%</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- By category -->
+      <div class="breakdown-section">
+        <div class="breakdown-label">
+          <mat-icon style="font-size:13px;width:13px;height:13px;color:#58a6ff">category</mat-icon>
+          By category
+        </div>
+        @if (categoryItems.length === 0) {
+          <div class="empty-msg">No data</div>
+        } @else {
+          @let catSlices = getPieSlices(categoryItems);
+          <div class="pie-container">
+            <svg viewBox="0 0 100 100" class="pie-svg">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="var(--siem-surface-elevated)" stroke-width="18"/>
+              @for (seg of catSlices; track seg.label) {
+                <circle cx="50" cy="50" r="40" fill="none"
+                        [attr.stroke]="seg.color" stroke-width="18"
+                        [attr.stroke-dasharray]="seg.dash + ' ' + PIE_C"
+                        [attr.stroke-dashoffset]="seg.offset"
+                        transform="rotate(-90 50 50)"/>
+              }
+              <text x="50" y="47" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">{{ categoryItems.length }}</text>
+              <text x="50" y="58" text-anchor="middle" fill="#8b949e" font-size="7">categories</text>
+            </svg>
+            <div class="pie-legend">
+              @for (seg of catSlices; track seg.label) {
+                <div class="legend-item">
+                  <span class="legend-dot" [style.background]="seg.color"></span>
+                  <span class="legend-label" [title]="seg.label">{{ seg.label }}</span>
+                  <span class="legend-count">{{ seg.val }}</span>
+                  <span class="legend-pct">{{ seg.pct }}%</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Top hosts -->
+      <div class="breakdown-section">
+        <div class="breakdown-label">
+          <mat-icon style="font-size:13px;width:13px;height:13px;color:#3fb950">computer</mat-icon>
+          Top hosts
+        </div>
+        @if (hostItems.length === 0) {
+          <div class="empty-msg">No host data</div>
+        } @else {
+          @let hostSlices = getPieSlices(hostItems);
+          <div class="pie-container">
+            <svg viewBox="0 0 100 100" class="pie-svg">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="var(--siem-surface-elevated)" stroke-width="18"/>
+              @for (seg of hostSlices; track seg.label) {
+                <circle cx="50" cy="50" r="40" fill="none"
+                        [attr.stroke]="seg.color" stroke-width="18"
+                        [attr.stroke-dasharray]="seg.dash + ' ' + PIE_C"
+                        [attr.stroke-dashoffset]="seg.offset"
+                        transform="rotate(-90 50 50)"/>
+              }
+              <text x="50" y="47" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">{{ hostItems.length }}</text>
+              <text x="50" y="58" text-anchor="middle" fill="#8b949e" font-size="7">hosts</text>
+            </svg>
+            <div class="pie-legend">
+              @for (seg of hostSlices; track seg.label) {
+                <div class="legend-item">
+                  <span class="legend-dot" [style.background]="seg.color"></span>
+                  <span class="legend-label" [title]="seg.label">{{ seg.label }}</span>
+                  <span class="legend-count">{{ seg.val }}</span>
+                  <span class="legend-pct">{{ seg.pct }}%</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Top users -->
+      <div class="breakdown-section">
+        <div class="breakdown-label">
+          <mat-icon style="font-size:13px;width:13px;height:13px;color:#7F77DD">person</mat-icon>
+          Top users
+        </div>
+        @if (userItems.length === 0) {
+          <div class="empty-msg">No user data</div>
+        } @else {
+          @let userSlices = getPieSlices(userItems);
+          <div class="pie-container">
+            <svg viewBox="0 0 100 100" class="pie-svg">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="var(--siem-surface-elevated)" stroke-width="18"/>
+              @for (seg of userSlices; track seg.label) {
+                <circle cx="50" cy="50" r="40" fill="none"
+                        [attr.stroke]="seg.color" stroke-width="18"
+                        [attr.stroke-dasharray]="seg.dash + ' ' + PIE_C"
+                        [attr.stroke-dashoffset]="seg.offset"
+                        transform="rotate(-90 50 50)"/>
+              }
+              <text x="50" y="47" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600">{{ userItems.length }}</text>
+              <text x="50" y="58" text-anchor="middle" fill="#8b949e" font-size="7">users</text>
+            </svg>
+            <div class="pie-legend">
+              @for (seg of userSlices; track seg.label) {
+                <div class="legend-item">
+                  <span class="legend-dot" [style.background]="seg.color"></span>
+                  <span class="legend-label" [title]="seg.label">{{ seg.label }}</span>
+                  <span class="legend-count">{{ seg.val }}</span>
+                  <span class="legend-pct">{{ seg.pct }}%</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+    </div>
+    </div><!-- /inner-section 2 -->
+
+    <!-- SECTION 3 — Recent alerts feed -->
+    <div class="inner-section">
+      <div class="inner-section-hdr">
+        <mat-icon style="color:#da3633">feed</mat-icon>
+        <span>Recent alerts · last {{ range }}</span>
+        <a routerLink="/alerts" class="hdr-link" style="margin-left:auto">View all alerts →</a>
+      </div>
+
+      <div class="alerts-section">
+
+      <!-- Alert rows -->
+      <div class="alerts-feed">
+        @if (recentEvents.length === 0) {
+          <div class="empty-msg">No alerts in this window</div>
+        }
+        @for (ev of recentEvents; track ev.event_id) {
+          <div class="alert-row">
+            <span [class]="'sev-badge ' + sevClass(ev.severity)">{{ ev.severity[0] }}</span>
+            <span class="alert-time">{{ relativeTime(ev.time) }}</span>
+            <span class="alert-src-dot" [style.background]="sourceColor(ev.source)" [title]="ev.source"></span>
+            <span class="alert-summary">{{ ev.summary }}</span>
+            @if (ev.host) {
+              <span class="alert-entity">
+                <mat-icon style="font-size:10px;width:10px;height:10px">computer</mat-icon>{{ ev.host }}
+              </span>
+            }
+            @if (ev.user) {
+              <span class="alert-entity">
+                <mat-icon style="font-size:10px;width:10px;height:10px">person</mat-icon>{{ ev.user }}
+              </span>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Distribution sidebar -->
+      <div class="alerts-dist">
+
+        <!-- Severity bars -->
+        <div class="dist-block">
+          <div class="breakdown-label">
+            <mat-icon style="font-size:12px;width:12px;height:12px;color:#da3633">bar_chart</mat-icon>
+            By severity
+          </div>
+          @for (bar of sevBars; track bar.label) {
+            <div class="sev-bar-row">
+              <span class="sev-bar-label">{{ bar.label }}</span>
+              <div class="sev-bar-track">
+                <div class="sev-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+              </div>
+              <span class="sev-bar-count" [style.color]="bar.color">{{ bar.count }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- By source -->
+        <div class="dist-block">
+          <div class="breakdown-label">
+            <mat-icon style="font-size:12px;width:12px;height:12px;color:#F46A1F">devices_other</mat-icon>
+            By source
+          </div>
+          @for (src of sourceBars; track src.label) {
+            <div class="sev-bar-row">
+              <span class="sev-bar-label">{{ src.label }}</span>
+              <div class="sev-bar-track">
+                <div class="sev-bar-fill" [style.width.%]="src.pct" [style.background]="src.color"></div>
+              </div>
+              <span class="sev-bar-count" [style.color]="src.color">{{ src.count }}</span>
+            </div>
+          }
+        </div>
+
+      </div>
+      </div>
+    </div><!-- /inner-section 3 -->
+
+    </div><!-- /alert-mgmt-body -->
+  </div><!-- /alert-mgmt-card -->
+
+  <!-- ── SOPHOS ENDPOINT SECURITY ───────────────────────────────────────────── -->
+  <div class="card sec-tool-card">
+    <div class="card-hdr sec-tool-hdr" style="background:rgba(0,114,198,.05)">
+      <span class="card-title alert-mgmt-title">
+        <mat-icon class="ci" style="color:#0072C6;font-size:16px;width:16px;height:16px">security</mat-icon>
+        Sophos Endpoint Security
+      </span>
+      <div class="hdr-filters">
+        @if (sophosTotal > 0) {
+          <span class="sec-total-badge" style="background:rgba(0,114,198,.12);color:#0072C6;border-color:rgba(0,114,198,.25)">
+            {{ sophosTotal | number }} events
+          </span>
+        }
+        <span class="range-label">{{ range }}</span>
+        <a routerLink="/alerts" [queryParams]="{source:'sophos-central',hours:currentHours}" class="hdr-link">View alerts →</a>
+      </div>
+    </div>
+
+    <!-- ── Endpoint Health Summary ────────────────────────────────────────── -->
+    <div class="ep-health-section">
+      <div class="inner-section-hdr" style="margin-bottom:10px">
+        <mat-icon style="color:#0072C6">monitor_heart</mat-icon>
+        <span>Endpoint Health</span>
+        @if (sophosHealthLoading) {
+          <span class="ep-health-loading">Loading…</span>
+        }
+      </div>
+
+      @if (!sophosHealthLoading && sophosHealth === null) {
+        <div class="ep-health-unavailable">
+          <mat-icon>cloud_off</mat-icon> Sophos API unavailable
+        </div>
+      } @else if (sophosHealth) {
+        <div class="ep-health-strip">
+
+          <!-- Total -->
+          <div class="ep-health-tile ep-health-total">
+            <div class="ep-health-icon"><mat-icon>devices</mat-icon></div>
+            <div>
+              <div class="ep-health-val">{{ sophosHealth.total | number }}</div>
+              <div class="ep-health-lbl">Total</div>
+            </div>
+          </div>
+
+          <!-- Good -->
+          <div class="ep-health-tile ep-health-good">
+            <div class="ep-health-icon"><mat-icon>check_circle</mat-icon></div>
+            <div>
+              <div class="ep-health-val" style="color:#3fb950">{{ sophosHealth.good | number }}</div>
+              <div class="ep-health-lbl">Good</div>
+              @if (sophosHealth.total > 0) {
+                <div class="ep-health-pct">{{ (sophosHealth.good / sophosHealth.total * 100) | number:'1.0-0' }}%</div>
+              }
+            </div>
+            <div class="ep-health-bar-wrap">
+              <div class="ep-health-bar ep-health-bar-good"
+                   [style.height.%]="sophosHealth.total > 0 ? (sophosHealth.good / sophosHealth.total * 100) : 0"></div>
+            </div>
+          </div>
+
+          <!-- Suspicious -->
+          <div class="ep-health-tile ep-health-susp">
+            <div class="ep-health-icon"><mat-icon>warning</mat-icon></div>
+            <div>
+              <div class="ep-health-val" style="color:#d29922">{{ sophosHealth.suspicious | number }}</div>
+              <div class="ep-health-lbl">Suspicious</div>
+              @if (sophosHealth.total > 0) {
+                <div class="ep-health-pct">{{ (sophosHealth.suspicious / sophosHealth.total * 100) | number:'1.0-0' }}%</div>
+              }
+            </div>
+            <div class="ep-health-bar-wrap">
+              <div class="ep-health-bar ep-health-bar-susp"
+                   [style.height.%]="sophosHealth.total > 0 ? (sophosHealth.suspicious / sophosHealth.total * 100) : 0"></div>
+            </div>
+          </div>
+
+          <!-- Bad -->
+          <div class="ep-health-tile ep-health-bad" [class.ep-health-tile-alert]="sophosHealth.bad > 0">
+            <div class="ep-health-icon"><mat-icon>dangerous</mat-icon></div>
+            <div>
+              <div class="ep-health-val" style="color:#da3633">{{ sophosHealth.bad | number }}</div>
+              <div class="ep-health-lbl">Bad</div>
+              @if (sophosHealth.total > 0) {
+                <div class="ep-health-pct">{{ (sophosHealth.bad / sophosHealth.total * 100) | number:'1.0-0' }}%</div>
+              }
+            </div>
+            <div class="ep-health-bar-wrap">
+              <div class="ep-health-bar ep-health-bar-bad"
+                   [style.height.%]="sophosHealth.total > 0 ? (sophosHealth.bad / sophosHealth.total * 100) : 0"></div>
+            </div>
+          </div>
+
+          @if (sophosHealth.unknown > 0) {
+            <!-- Unknown -->
+            <div class="ep-health-tile ep-health-unk">
+              <div class="ep-health-icon"><mat-icon>help_outline</mat-icon></div>
+              <div>
+                <div class="ep-health-val" style="color:#8b949e">{{ sophosHealth.unknown | number }}</div>
+                <div class="ep-health-lbl">Unknown</div>
+              </div>
+            </div>
+          }
+
+        </div>
+      }
+    </div>
+    <div class="card-section-divider" style="margin:0 16px"></div>
+
+    @if (sophosTotal === 0) {
+      <div class="empty-msg" style="padding:16px 0">No Sophos events in this window</div>
+    } @else {
+      <div class="alerts-section sec-tool-body">
+
+        <!-- Recent sophos alerts -->
+        <div class="alerts-feed">
+          @if (sophosEvents.length === 0) {
+            <div class="empty-msg">No sample data available</div>
+          }
+          @for (ev of sophosEvents; track ev.event_id) {
+            <div class="alert-row">
+              <span [class]="'sev-badge ' + sevClass(ev.severity)">{{ ev.severity[0] }}</span>
+              <span class="alert-time">{{ relativeTime(ev.time) }}</span>
+              <span class="alert-summary">{{ ev.summary }}</span>
+              @if (ev.host) {
+                <span class="alert-entity">
+                  <mat-icon style="font-size:10px;width:10px;height:10px">computer</mat-icon>{{ ev.host }}
+                </span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Right: severity bars + top endpoints -->
+        <div class="alerts-dist">
+          <div class="dist-block">
+            <div class="breakdown-label">
+              <mat-icon style="font-size:12px;width:12px;height:12px;color:#da3633">bar_chart</mat-icon>
+              By severity
+            </div>
+            @for (bar of sophosSevBars; track bar.label) {
+              <div class="sev-bar-row">
+                <span class="sev-bar-label">{{ bar.label }}</span>
+                <div class="sev-bar-track">
+                  <div class="sev-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+                </div>
+                <span class="sev-bar-count" [style.color]="bar.color">{{ bar.count }}</span>
+              </div>
+            }
+          </div>
+
+          @if (sophosTopHosts.length > 0) {
+            <div class="dist-block">
+              <div class="breakdown-label">
+                <mat-icon style="font-size:12px;width:12px;height:12px;color:#0072C6">computer</mat-icon>
+                Top endpoints
+              </div>
+              @for (h of sophosTopHosts; track h.label) {
+                <div class="sev-bar-row">
+                  <span class="sev-bar-label" [title]="h.label">{{ h.label }}</span>
+                  <div class="sev-bar-track">
+                    <div class="sev-bar-fill" [style.width.%]="(h.val / h.max) * 100" style="background:#0072C6"></div>
+                  </div>
+                  <span class="sev-bar-count" style="color:#0072C6">{{ h.val }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+  </div><!-- /sophos-card -->
+
+  <!-- ── MICROSOFT DEFENDER ─────────────────────────────────────────────────── -->
+  <div class="card sec-tool-card">
+    <div class="card-hdr sec-tool-hdr" style="background:rgba(0,180,240,.05)">
+      <span class="card-title alert-mgmt-title">
+        <mat-icon class="ci" style="color:#00B4F0;font-size:16px;width:16px;height:16px">shield</mat-icon>
+        Microsoft Defender
+      </span>
+      <div class="hdr-filters">
+        @if (defenderTotal > 0) {
+          <span class="sec-total-badge" style="background:rgba(0,180,240,.12);color:#00B4F0;border-color:rgba(0,180,240,.25)">
+            {{ defenderTotal | number }} events
+          </span>
+        }
+        <span class="range-label">{{ range }}</span>
+        <a routerLink="/alerts" [queryParams]="{source:'ms-defender',hours:currentHours}" class="hdr-link">View alerts →</a>
+      </div>
+    </div>
+
+    @if (defenderTotal === 0) {
+      <div class="empty-msg" style="padding:20px 0">No Microsoft Defender events in this window</div>
+    } @else {
+      <div class="alerts-section sec-tool-body">
+
+        <!-- Recent defender alerts -->
+        <div class="alerts-feed">
+          @if (defenderEvents.length === 0) {
+            <div class="empty-msg">No sample data available</div>
+          }
+          @for (ev of defenderEvents; track ev.event_id) {
+            <div class="alert-row">
+              <span [class]="'sev-badge ' + sevClass(ev.severity)">{{ ev.severity[0] }}</span>
+              <span class="alert-time">{{ relativeTime(ev.time) }}</span>
+              <span class="alert-summary">{{ ev.summary }}</span>
+              @if (ev.user) {
+                <span class="alert-entity">
+                  <mat-icon style="font-size:10px;width:10px;height:10px">person</mat-icon>{{ ev.user }}
+                </span>
+              }
+              @if (ev.host) {
+                <span class="alert-entity">
+                  <mat-icon style="font-size:10px;width:10px;height:10px">computer</mat-icon>{{ ev.host }}
+                </span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Right: severity + attack categories + top devices/users -->
+        <div class="alerts-dist">
+          <div class="dist-block">
+            <div class="breakdown-label">
+              <mat-icon style="font-size:12px;width:12px;height:12px;color:#da3633">bar_chart</mat-icon>
+              By severity
+            </div>
+            @for (bar of defenderSevBars; track bar.label) {
+              <div class="sev-bar-row">
+                <span class="sev-bar-label">{{ bar.label }}</span>
+                <div class="sev-bar-track">
+                  <div class="sev-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+                </div>
+                <span class="sev-bar-count" [style.color]="bar.color">{{ bar.count }}</span>
+              </div>
+            }
+          </div>
+
+          @if (defenderCatBars.length > 0) {
+            <div class="dist-block">
+              <div class="breakdown-label">
+                <mat-icon style="font-size:12px;width:12px;height:12px;color:#00B4F0">category</mat-icon>
+                Attack categories
+              </div>
+              @for (c of defenderCatBars; track c.label) {
+                <div class="sev-bar-row">
+                  <span class="sev-bar-label" [title]="c.label">{{ c.label }}</span>
+                  <div class="sev-bar-track">
+                    <div class="sev-bar-fill" [style.width.%]="c.pct" [style.background]="c.color"></div>
+                  </div>
+                  <span class="sev-bar-count" [style.color]="c.color">{{ c.count }}</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (defenderTopDevices.length > 0) {
+            <div class="dist-block">
+              <div class="breakdown-label">
+                <mat-icon style="font-size:12px;width:12px;height:12px;color:#00B4F0">computer</mat-icon>
+                Top affected devices
+              </div>
+              @for (d of defenderTopDevices; track d.label) {
+                <div class="sev-bar-row">
+                  <span class="sev-bar-label" [title]="d.label">{{ d.label }}</span>
+                  <div class="sev-bar-track">
+                    <div class="sev-bar-fill" [style.width.%]="(d.val / d.max) * 100" style="background:#00B4F0"></div>
+                  </div>
+                  <span class="sev-bar-count" style="color:#00B4F0">{{ d.val }}</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (defenderTopUsers.length > 0) {
+            <div class="dist-block">
+              <div class="breakdown-label">
+                <mat-icon style="font-size:12px;width:12px;height:12px;color:#7cb8e8">person</mat-icon>
+                Top affected users
+              </div>
+              @for (u of defenderTopUsers; track u.label) {
+                <div class="sev-bar-row">
+                  <span class="sev-bar-label" [title]="u.label">{{ u.label }}</span>
+                  <div class="sev-bar-track">
+                    <div class="sev-bar-fill" [style.width.%]="(u.val / u.max) * 100" style="background:#7cb8e8"></div>
+                  </div>
+                  <span class="sev-bar-count" style="color:#7cb8e8">{{ u.val }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+  </div><!-- /defender-card -->
+
+  <!-- ── DARKTRACE ──────────────────────────────────────────────────────────── -->
+  <div class="card sec-tool-card">
+    <div class="card-hdr sec-tool-hdr" style="background:rgba(127,119,221,.05)">
+      <span class="card-title alert-mgmt-title">
+        <mat-icon class="ci" style="color:#7F77DD;font-size:16px;width:16px;height:16px">radar</mat-icon>
+        Darktrace
+      </span>
+      <div class="hdr-filters">
+        @if (darktraceTotal > 0) {
+          <span class="sec-total-badge" style="background:rgba(127,119,221,.12);color:#7F77DD;border-color:rgba(127,119,221,.25)">
+            {{ darktraceTotal | number }} breaches
+          </span>
+        }
+        <span class="range-label">{{ range }}</span>
+        <a routerLink="/alerts" [queryParams]="{source:'darktrace',hours:currentHours}" class="hdr-link">View alerts →</a>
+      </div>
+    </div>
+
+    @if (darktraceTotal === 0) {
+      <div class="empty-msg" style="padding:20px 0">No Darktrace model breaches in this window</div>
+    } @else {
+      <div class="alerts-section sec-tool-body">
+
+        <!-- Recent Darktrace model breaches -->
+        <div class="alerts-feed">
+          @if (darktraceEvents.length === 0) {
+            <div class="empty-msg">No sample data available</div>
+          }
+          @for (ev of darktraceEvents; track ev.event_id) {
+            <div class="alert-row">
+              <span [class]="'sev-badge ' + sevClass(ev.severity)">{{ ev.severity[0] }}</span>
+              <span class="alert-time">{{ relativeTime(ev.time) }}</span>
+              <span class="alert-summary">{{ ev.summary }}</span>
+              @if (ev.raw['score']) {
+                <span class="dt-score-badge" [title]="'Breach score: ' + ev.raw['score'] + '%'">
+                  {{ ev.raw['score'] }}%
+                </span>
+              }
+              @if (ev.host) {
+                <span class="alert-entity">
+                  <mat-icon style="font-size:10px;width:10px;height:10px">computer</mat-icon>{{ ev.host }}
+                </span>
+              }
+              @if (ev.user) {
+                <span class="alert-entity">
+                  <mat-icon style="font-size:10px;width:10px;height:10px">person</mat-icon>{{ ev.user }}
+                </span>
+              }
+              @if (ev.raw['breach_url']) {
+                <a [href]="ev.raw['breach_url']" target="_blank" class="dt-breach-link" title="View in Darktrace">
+                  <mat-icon style="font-size:10px;width:10px;height:10px">open_in_new</mat-icon>
+                </a>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Right: severity bars + model category bars + top devices -->
+        <div class="alerts-dist">
+          <div class="dist-block">
+            <div class="breakdown-label">
+              <mat-icon style="font-size:12px;width:12px;height:12px;color:#da3633">bar_chart</mat-icon>
+              By severity
+            </div>
+            @for (bar of darktraceSevBars; track bar.label) {
+              <div class="sev-bar-row">
+                <span class="sev-bar-label">{{ bar.label }}</span>
+                <div class="sev-bar-track">
+                  <div class="sev-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+                </div>
+                <span class="sev-bar-count" [style.color]="bar.color">{{ bar.count }}</span>
+              </div>
+            }
+          </div>
+
+          @if (darktraceCatBars.length > 0) {
+            <div class="dist-block">
+              <div class="breakdown-label">
+                <mat-icon style="font-size:12px;width:12px;height:12px;color:#7F77DD">category</mat-icon>
+                Model category
+              </div>
+              @for (bar of darktraceCatBars; track bar.label) {
+                <div class="sev-bar-row">
+                  <span class="sev-bar-label">{{ bar.label }}</span>
+                  <div class="sev-bar-track">
+                    <div class="sev-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+                  </div>
+                  <span class="sev-bar-count" [style.color]="bar.color">{{ bar.count }}</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (darktraceTopDevices.length > 0) {
+            <div class="dist-block">
+              <div class="breakdown-label">
+                <mat-icon style="font-size:12px;width:12px;height:12px;color:#7F77DD">computer</mat-icon>
+                Top affected devices
+              </div>
+              @for (d of darktraceTopDevices; track d.label) {
+                <div class="sev-bar-row">
+                  <span class="sev-bar-label" [title]="d.label">{{ d.label }}</span>
+                  <div class="sev-bar-track">
+                    <div class="sev-bar-fill" [style.width.%]="(d.val / d.max) * 100" style="background:#7F77DD"></div>
+                  </div>
+                  <span class="sev-bar-count" style="color:#7F77DD">{{ d.val }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+  </div><!-- /darktrace-card -->
+
+</div>

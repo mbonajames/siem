@@ -1,0 +1,354 @@
+<div class="corr-page">
+
+  <!-- ── Page header ── -->
+  <div class="page-header">
+    <div class="header-left">
+      <mat-icon class="header-icon">hub</mat-icon>
+      <div>
+        <div class="page-title">Correlated Events Investigation</div>
+        <div class="page-sub">Pivot across Wazuh · Sophos · Darktrace · MS Graph · Jira</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Search bar ── -->
+  <div class="search-card">
+    <div class="entity-tabs">
+      @for (et of entityTypes; track et.value) {
+        <button class="entity-tab" [class.active]="entityType === et.value" (click)="entityType = et.value">
+          <mat-icon>{{ et.icon }}</mat-icon> {{ et.label }}
+        </button>
+      }
+    </div>
+    <div class="search-row">
+      <div class="search-input-wrap">
+        <mat-icon class="search-prefix-icon">{{ currentEntityMeta.icon }}</mat-icon>
+        <input class="search-input"
+               [(ngModel)]="entityValue"
+               [placeholder]="currentEntityMeta.placeholder"
+               (keyup.enter)="investigate()" />
+      </div>
+      <select class="days-select" [(ngModel)]="days">
+        <option [value]="1">24 hours</option>
+        <option [value]="7">7 days</option>
+        <option [value]="14">14 days</option>
+        <option [value]="30">30 days</option>
+      </select>
+      <button class="btn-investigate" (click)="investigate()" [disabled]="!entityValue.trim() || loading">
+        <mat-icon>{{ loading ? 'hourglass_top' : 'manage_search' }}</mat-icon>
+        {{ loading ? 'Investigating…' : 'Investigate' }}
+      </button>
+    </div>
+    <div class="search-hint">
+      Enter a {{ currentEntityMeta.label.toLowerCase() }} and press Investigate to correlate events across all security tools.
+    </div>
+  </div>
+
+  <!-- ── Loading state ── -->
+  @if (loading) {
+    <div class="loading-card">
+      <div class="loading-sources">
+        @for (src of sources; track src) {
+          <div class="loading-source">
+            <span class="loading-dot pulse"></span>
+            <mat-icon [style.color]="srcColor(src)">{{ srcIcon(src) }}</mat-icon>
+            <span>Querying {{ srcLabel(src) }}…</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ── Error ── -->
+  @if (error && !loading) {
+    <div class="error-card">
+      <mat-icon>error_outline</mat-icon> {{ error }}
+    </div>
+  }
+
+  <!-- ── Results ── -->
+  @if (result && !loading) {
+
+    <!-- Entity banner -->
+    <div class="entity-banner">
+      <mat-icon class="eb-icon">{{ currentEntityMeta.icon }}</mat-icon>
+      <div class="eb-info">
+        <div class="eb-value">{{ result.entity.value }}</div>
+        <div class="eb-meta">{{ result.entity.type | titlecase }} · {{ result.entity.days }}d window · {{ result.total }} total events</div>
+      </div>
+      <div class="eb-actions">
+        <button class="btn-ticket" (click)="openTicketModal()">
+          <mat-icon>add_task</mat-icon> Raise Jira Ticket
+        </button>
+      </div>
+    </div>
+
+    <!-- Source breakdown tiles -->
+    <div class="source-tiles">
+      @for (src of sources; track src) {
+        <div class="source-tile"
+             [class.active-filter]="activeFilter === src"
+             [style.--src-color]="srcColor(src)"
+             (click)="activeFilter = activeFilter === src ? 'all' : src">
+          <div class="src-tile-head">
+            <mat-icon [style.color]="srcColor(src)">{{ srcIcon(src) }}</mat-icon>
+            <span class="src-tile-label">{{ srcLabel(src) }}</span>
+            @if (result.errors[src]) { <mat-icon class="src-err-icon" title="Error">warning</mat-icon> }
+          </div>
+          <div class="src-tile-count" [style.color]="srcColor(src)">{{ sourceCount(src) }}</div>
+          <div class="src-tile-sub">
+            @if ((result.source_stats[src]?.critical ?? 0) > 0) {
+              <span class="src-crit">{{ result.source_stats[src].critical }} crit</span>
+            }
+            @if ((result.source_stats[src]?.high ?? 0) > 0) {
+              <span class="src-high">{{ result.source_stats[src].high }} high</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Severity filter pills -->
+    <div class="sev-filter-row">
+      <span class="sev-filter-label">Severity:</span>
+      @for (s of ['all','critical','high','medium','low','info']; track s) {
+        <button class="sev-pill" [class.active]="activeSeverity === s"
+                [ngClass]="s !== 'all' ? 'sev-pill-' + s : ''"
+                (click)="activeSeverity = $any(s)">
+          {{ s }}{{ s !== 'all' ? ' (' + (sevCounts[s] ?? 0) + ')' : '' }}
+        </button>
+      }
+      @if (highlightedIds.size > 0) {
+        <button class="sev-pill clear-hl" (click)="clearHighlight()">
+          <mat-icon>filter_list_off</mat-icon> Clear highlight
+        </button>
+      }
+    </div>
+
+    <!-- Main layout: timeline | insights + actions -->
+    <div class="main-layout">
+
+      <!-- ── Timeline ── -->
+      <div class="timeline-card card">
+        <div class="card-head">
+          <mat-icon>timeline</mat-icon>
+          Event Timeline
+          <span class="result-count">{{ filteredEvents.length }} events</span>
+        </div>
+
+        @if (filteredEvents.length === 0) {
+          <div class="empty-state">
+            <mat-icon>search_off</mat-icon>
+            <span>No events match the current filter.</span>
+          </div>
+        }
+
+        <div class="timeline-scroll">
+          <div class="timeline-list">
+            @for (ev of filteredEvents; track ev.id) {
+              <div class="timeline-item"
+                   [class.tl-highlighted]="isHighlighted(ev)"
+                   [class.tl-dimmed]="isDimmed(ev)"
+                   [class.tl-expanded]="expandedId === ev.id"
+                   (click)="toggleExpand(ev.id)">
+
+                <!-- Source dot + line -->
+                <div class="tl-dot-col">
+                  <div class="tl-dot" [style.background]="srcColor(ev.source)">
+                    <mat-icon class="tl-dot-icon">{{ srcIcon(ev.source) }}</mat-icon>
+                  </div>
+                  <div class="tl-line"></div>
+                </div>
+
+                <!-- Content -->
+                <div class="tl-content">
+                  <div class="tl-header">
+                    <span class="tl-source-badge" [style.color]="srcColor(ev.source)">
+                      {{ srcLabel(ev.source) }}
+                    </span>
+                    <span class="sev-badge" [ngClass]="sevClass(ev.severity)">{{ ev.severity }}</span>
+                    <span class="tl-agent">{{ ev.agent }}</span>
+                    <span class="tl-time" [title]="formatDate(ev.timestamp)">{{ formatRelative(ev.timestamp) }}</span>
+                    <mat-icon class="tl-expand-icon">{{ expandedId === ev.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                  </div>
+                  <div class="tl-title">{{ ev.title }}</div>
+                  <div class="tl-desc">{{ ev.description }}</div>
+
+                  @if (ev.tags?.length) {
+                    <div class="tl-tags">
+                      @for (tag of ev.tags; track tag) {
+                        @if (tag) { <span class="tl-tag">{{ tag }}</span> }
+                      }
+                    </div>
+                  }
+
+                  <!-- Expanded raw details -->
+                  @if (expandedId === ev.id) {
+                    <div class="tl-raw">
+                      <div class="tl-raw-head">
+                        <span>Raw · {{ formatDate(ev.timestamp) }}</span>
+                        @if (ev.rule_id) { <span>Rule: {{ ev.rule_id }} (L{{ ev.rule_level }})</span> }
+                        @if (ev.jira_key) { <span class="jira-key">{{ ev.jira_key }}</span> }
+                        @if (ev.delivery_action) { <span>Delivery: {{ ev.delivery_action }}</span> }
+                      </div>
+                      <pre class="tl-raw-json">{{ ev.raw | json }}</pre>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right panel ── -->
+      <div class="right-panel">
+
+        <!-- Attack chain insights -->
+        @if (result.insights.length > 0) {
+          <div class="card insights-card">
+            <div class="card-head">
+              <mat-icon>auto_awesome</mat-icon>
+              Attack Chain Analysis
+              <span class="badge-count">{{ result.insights.length }}</span>
+            </div>
+            <div class="insights-list">
+              @for (ins of result.insights; track ins.type) {
+                <div class="insight-item" [ngClass]="insightClass(ins.severity)"
+                     (click)="highlightInsight(ins)">
+                  <div class="ins-header">
+                    <span class="ins-sev" [ngClass]="sevClass(ins.severity)">{{ ins.severity }}</span>
+                    <span class="ins-title">{{ ins.title }}</span>
+                  </div>
+                  <div class="ins-detail">{{ ins.detail }}</div>
+                  @if (ins.related_ids.length > 0) {
+                    <div class="ins-link">
+                      <mat-icon>highlight</mat-icon> Click to highlight {{ ins.related_ids.length }} event(s)
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Errors (if any source failed) -->
+        @if (result.errors && (result.errors | keyvalue).length > 0) {
+          <div class="card errors-card">
+            <div class="card-head">
+              <mat-icon>warning_amber</mat-icon> Source Errors
+            </div>
+            <div class="errors-list">
+              @for (err of result.errors | keyvalue; track err.key) {
+                <div class="error-row">
+                  <mat-icon [style.color]="srcColor($any(err.key))">{{ srcIcon($any(err.key)) }}</mat-icon>
+                  <div>
+                    <div class="err-src">{{ srcLabel($any(err.key)) }}</div>
+                    <div class="err-msg">{{ err.value }}</div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Remediation panel -->
+        <div class="card rem-card">
+          <div class="card-head">
+            <mat-icon>healing</mat-icon> Remediation Actions
+          </div>
+          <div class="rem-body">
+
+            @if (entityType === 'user' || entityType === 'ip') {
+              <div class="rem-section">
+                <div class="rem-section-label">Email</div>
+                <button class="rem-btn quarantine" disabled title="Select an email event first">
+                  <mat-icon>lock</mat-icon> Quarantine Emails
+                </button>
+                <button class="rem-btn del" disabled title="Select an email event first">
+                  <mat-icon>delete_outline</mat-icon> Soft-Delete Emails
+                </button>
+              </div>
+            }
+
+            @if (entityType === 'user' || entityType === 'device') {
+              <div class="rem-section">
+                <div class="rem-section-label">Endpoint</div>
+                <button class="rem-btn isolate" disabled title="Isolation requires a Sophos endpoint ID — select a Sophos event">
+                  <mat-icon>lock_clock</mat-icon> Isolate Device
+                </button>
+              </div>
+            }
+
+            <div class="rem-section">
+              <div class="rem-section-label">Jira Incident</div>
+              <button class="rem-btn ticket" (click)="openTicketModal()" [disabled]="!result">
+                <mat-icon>add_task</mat-icon> Create Incident Ticket
+              </button>
+            </div>
+
+            <div class="rem-note">
+              <mat-icon>info</mat-icon>
+              To isolate a device or remediate an email, select the specific event in the timeline and use its inline actions, or navigate to the Email Security or Sophos module.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- ── Ticket modal ── -->
+  @if (ticketModal) {
+    <div class="modal-backdrop" (click)="ticketModal = false">
+      <div class="modal-box" (click)="$event.stopPropagation()">
+        <div class="modal-title">
+          <mat-icon>add_task</mat-icon> Create Jira Incident Ticket
+        </div>
+        <div class="modal-body">
+          <div class="modal-summary">
+            Entity: <strong>{{ result?.entity?.value }}</strong> · {{ result?.total }} events
+          </div>
+          @if (result?.insights?.length) {
+            <div class="modal-insights-preview">
+              @for (ins of result!.insights; track ins.type) {
+                <div class="mip-row">
+                  <span class="sev-badge sm" [ngClass]="sevClass(ins.severity)">{{ ins.severity }}</span>
+                  {{ ins.title }}
+                </div>
+              }
+            </div>
+          }
+          <div class="modal-field">
+            <label>Priority</label>
+            <select [(ngModel)]="ticketPriority">
+              <option>Highest</option>
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label>Additional notes</label>
+            <textarea [(ngModel)]="ticketNotes" rows="3" placeholder="Context, actions taken, next steps…"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" (click)="ticketModal = false">Cancel</button>
+          <button class="btn-confirm" (click)="submitTicket()" [disabled]="ticketLoading">
+            <mat-icon>check</mat-icon> {{ ticketLoading ? 'Creating…' : 'Create Ticket' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ── Toast ── -->
+  @if (toast) {
+    <div class="corr-toast" [class.toast-err]="toast.type === 'err'" [class.toast-warn]="toast.type === 'warn'">
+      <mat-icon>{{ toast.type === 'ok' ? 'check_circle' : toast.type === 'warn' ? 'warning' : 'error' }}</mat-icon>
+      {{ toast.msg }}
+    </div>
+  }
+
+</div>

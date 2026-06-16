@@ -1,0 +1,36 @@
+<div class="sidebar-wrapper">
+  <div class="sidebar-brand">
+    <img class="brand-logo"
+         src="https://www.hopeinternational.org/assets/images/brand/HOPE_H_yellowgray_web.svg"
+         alt="Hope International" />
+    <!-- <span class="brand-name">SecOps</span> -->
+  </div>
+
+  <mat-nav-list class="nav-list">
+    @for (item of navItems; track item.path) {
+      <a
+        mat-list-item
+        [routerLink]="item.path"
+        routerLinkActive="active"
+        class="nav-item"
+      >
+        <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+        <span matListItemTitle>{{ item.label }}</span>
+      </a>
+    }
+  </mat-nav-list>
+
+  <div class="sidebar-footer">
+    <mat-nav-list>
+      <a
+        mat-list-item
+        routerLink="/settings"
+        routerLinkActive="active"
+        class="nav-item"
+      >
+        <mat-icon matListItemIcon>settings</mat-icon>
+        <span matListItemTitle>Settings</span>
+      </a>
+    </mat-nav-list>
+  </div>
+</div>
