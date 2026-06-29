@@ -2,14 +2,19 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
-import { forkJoin, of } from 'rxjs';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { of } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
 import {
   EmailSecurityService,
   EmailRecord,
   EmailDetail,
-  EmailStats,
   EmailSearchFilters,
+  MitreTechnique,
+  VtResult,
+  DefenderIncident,
+  DefenderIncidentAlert,
+  IncidentEvidence,
 } from '../../core/services/email-security.service';
 
 interface Toast { msg: string; type: 'ok' | 'err' | 'warn'; }
@@ -25,26 +30,36 @@ const DEFAULT_HUNT = `EmailEvents
 @Component({
   selector: 'app-email-security',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatIconModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatExpansionModule],
   templateUrl: './email-security.component.html',
   styleUrl: './email-security.component.scss',
 })
 export class EmailSecurityComponent implements OnInit {
   // Data
   emails: EmailRecord[] = [];
-  stats: EmailStats = { Total: 0, Phishing: 0, Malware: 0, Spam: 0, BEC: 0, Blocked: 0, Delivered: 0, Quarantined: 0 };
   selectedEmail: EmailRecord | null = null;
   detail: EmailDetail | null = null;
-
-  // Filters
-  filters: EmailSearchFilters = { days: 7 };
-  filterInputs = { sender: '', recipient: '', subject: '', threat_type: '', delivery_action: '', days: 7 };
 
   // UI state
   loading = false;
   detailLoading = false;
-  activeTab: 'list' | 'hunt' = 'list';
-  showFilterBar = true;
+  activeTab: 'list' | 'incidents' | 'hunt' = 'list';
+  apiError = '';
+  permissionDenied = false;
+
+  // Filters (days → API reload; severity/status → client-side)
+  days = 7;
+  filterSeverity = '';
+  filterStatus = '';
+
+  // Incidents — fetched directly from Graph API
+  incidents: DefenderIncident[] = [];
+  incidentsLoading = false;
+  incidentsError = '';
+
+  // Incidents tab expansion state
+  expandedIncidentIds = new Set<string>();
+  expandedAlertIds    = new Set<string>();
 
   // Hunting
   huntQuery = DEFAULT_HUNT;
@@ -61,40 +76,74 @@ export class EmailSecurityComponent implements OnInit {
   toast: Toast | null = null;
   private toastTimer: any;
 
+  // VirusTotal state — keyed by "type:value"
+  vtResults: Record<string, VtResult> = {};
+  vtLoading = new Set<string>();
+
   constructor(private svc: EmailSecurityService) {}
 
   ngOnInit(): void {
     this.loadAll();
+    this.loadIncidents();
+  }
+
+  setDays(d: number): void {
+    this.days = d;
+    this.loadAll();
+    this.loadIncidents();
+  }
+
+  loadIncidents(): void {
+    this.incidentsLoading = true;
+    this.incidentsError = '';
+    this.svc.getIncidents(this.days)
+      .pipe(
+        catchError(e => {
+          this.incidentsError = e?.error?.detail || e?.message || 'Failed to load incidents';
+          return of({ incidents: [], total: 0 });
+        }),
+        finalize(() => (this.incidentsLoading = false)),
+      )
+      .subscribe(r => {
+        this.incidents = r.incidents || [];
+      });
+  }
+
+  get filteredIncidents(): DefenderIncident[] {
+    return this.incidents.filter(inc => {
+      if (this.filterSeverity && inc.severity !== this.filterSeverity) return false;
+      if (this.filterStatus  && inc.status.toLowerCase() !== this.filterStatus) return false;
+      return true;
+    });
+  }
+
+  get filteredEmails(): EmailRecord[] {
+    return this.emails.filter(em => {
+      if (this.filterSeverity && (em.Severity || '').toLowerCase() !== this.filterSeverity) return false;
+      if (this.filterStatus && (em.Status || '').toLowerCase() !== this.filterStatus) return false;
+      return true;
+    });
   }
 
   loadAll(): void {
     this.loading = true;
-    forkJoin({
-      emails: this.svc.searchEmails(this.filters).pipe(catchError(() => of({ results: [] }))),
-      stats:  this.svc.getStats(this.filters.days ?? 7).pipe(catchError(() => of(null))),
-    }).pipe(finalize(() => (this.loading = false))).subscribe(({ emails, stats }) => {
-      this.emails = (emails as any).results || [];
-      if (stats) this.stats = stats as EmailStats;
+    this.apiError = '';
+    this.permissionDenied = false;
+    this.svc.searchEmails({ days: this.days }).pipe(
+      catchError(e => {
+        const status = e?.status;
+        const detail = e?.error?.detail || e?.message || 'API error';
+        if (status === 403 || status === 503) {
+          this.permissionDenied = true;
+        } else {
+          this.apiError = detail;
+        }
+        return of({ results: [] });
+      }),
+      finalize(() => (this.loading = false)),
+    ).subscribe(r => {
+      this.emails = (r as any).results || [];
     });
-  }
-
-  applyFilters(): void {
-    this.filters = {
-      sender:          this.filterInputs.sender   || undefined,
-      recipient:       this.filterInputs.recipient || undefined,
-      subject:         this.filterInputs.subject   || undefined,
-      threat_type:     this.filterInputs.threat_type || undefined,
-      delivery_action: this.filterInputs.delivery_action || undefined,
-      days:            this.filterInputs.days,
-    };
-    this.selectedEmail = null;
-    this.detail = null;
-    this.loadAll();
-  }
-
-  clearFilters(): void {
-    this.filterInputs = { sender: '', recipient: '', subject: '', threat_type: '', delivery_action: '', days: 7 };
-    this.applyFilters();
   }
 
   selectEmail(email: EmailRecord): void {
@@ -124,7 +173,14 @@ export class EmailSecurityComponent implements OnInit {
           this.huntSchema  = r.schema  || [];
           if (this.huntResults.length === 0) this.huntError = 'Query returned no results.';
         },
-        error: e => (this.huntError = e?.error?.error || 'Query failed'),
+        error: e => {
+          const status = e?.status;
+          if (status === 403 || status === 503) {
+            this.huntError = 'PERMISSION_DENIED';
+          } else {
+            this.huntError = e?.error?.detail || e?.error?.error || 'Query failed';
+          }
+        },
       });
   }
 
@@ -157,7 +213,58 @@ export class EmailSecurityComponent implements OnInit {
       });
   }
 
-  // Helpers
+  // ── Incidents ────────────────────────────────────────────────────────────────
+
+  toggleIncident(id: string): void {
+    if (this.expandedIncidentIds.has(id)) this.expandedIncidentIds.delete(id);
+    else this.expandedIncidentIds.add(id);
+  }
+
+  toggleAlertRow(alertId: string): void {
+    if (this.expandedAlertIds.has(alertId)) this.expandedAlertIds.delete(alertId);
+    else this.expandedAlertIds.add(alertId);
+  }
+
+  incidentHighestSeverity(inc: DefenderIncident): string {
+    const order = ['high', 'medium', 'low', 'informational'];
+    for (const sev of order) {
+      if (inc.alerts.some(a => (a.severity || '').toLowerCase() === sev)) return sev;
+    }
+    return (inc.severity || 'unknown').toLowerCase();
+  }
+
+  uniqueServices(inc: DefenderIncident): string[] {
+    const SHORT: Record<string, string> = {
+      microsoftDefenderForOffice365: 'Email',
+      microsoftDefenderForEndpoint:  'Endpoint',
+      microsoftDefenderForIdentity:  'Identity',
+      microsoftCloudAppSecurity:     'Cloud Apps',
+      azureAdIdentityProtection:     'AADIP',
+      microsoftDefender:             'Defender',
+    };
+    return [...new Set(inc.alerts.map(a => SHORT[a.serviceSource] || a.serviceSource).filter(Boolean))];
+  }
+
+  uniqueCategories(inc: DefenderIncident): string[] {
+    return [...new Set(inc.alerts.map(a => this.getThreatLabel(a.category)).filter(c => c !== 'Clean'))];
+  }
+
+  evidenceOf(ia: DefenderIncidentAlert, type: string): IncidentEvidence[] {
+    return (ia.evidence || []).filter(e => e.type === type);
+  }
+
+  get incidentStats() {
+    const incs = this.filteredIncidents;
+    return {
+      total:    incs.length,
+      active:   incs.filter(i => ['active', 'inprogress'].includes((i.status || '').toLowerCase())).length,
+      resolved: incs.filter(i => i.status?.toLowerCase() === 'resolved').length,
+      high:     incs.filter(i => i.severity?.toLowerCase() === 'high').length,
+    };
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
   getThreatClass(threats: string): string {
     if (!threats) return '';
     const t = threats.toLowerCase();
@@ -204,7 +311,36 @@ export class EmailSecurityComponent implements OnInit {
   }
 
   isUrlThreat(url: any): boolean {
-    return !!(url.ThreatTypes && url.ThreatTypes.length);
+    return !!(url.ThreatTypes && url.ThreatTypes.length) || url.Verdict === 'malicious';
+  }
+
+  verdictClass(verdict: string): string {
+    const v = (verdict || '').toLowerCase();
+    if (v === 'malicious')  return 'verdict-malicious';
+    if (v === 'suspicious') return 'verdict-suspicious';
+    if (v === 'clean')      return 'verdict-clean';
+    return 'verdict-unknown';
+  }
+
+  severityClass(sev: string): string {
+    const s = (sev || '').toLowerCase();
+    if (s === 'high')          return 'sev-high';
+    if (s === 'medium')        return 'sev-medium';
+    if (s === 'low')           return 'sev-low';
+    if (s === 'informational') return 'sev-info';
+    return 'sev-unknown';
+  }
+
+  statusClass(status: string): string {
+    const s = (status || '').toLowerCase();
+    if (s === 'resolved')   return 'status-resolved';
+    if (s === 'inprogress') return 'status-progress';
+    if (s === 'new')        return 'status-new';
+    return 'status-unknown';
+  }
+
+  mitreLabel(t: MitreTechnique): string {
+    return t.id ? `${t.id} — ${t.technique}` : t.technique;
   }
 
   formatDate(ts: string): string {
@@ -212,9 +348,70 @@ export class EmailSecurityComponent implements OnInit {
     return new Date(ts).toLocaleString();
   }
 
+  truncate(s: string, max = 60): string {
+    if (!s) return '—';
+    return s.length > max ? s.slice(0, max) + '…' : s;
+  }
+
   showToast(msg: string, type: 'ok' | 'err' | 'warn'): void {
     clearTimeout(this.toastTimer);
     this.toast = { msg, type };
     this.toastTimer = setTimeout(() => (this.toast = null), 4000);
+  }
+
+  // ── VirusTotal helpers ──────────────────────────────────────────────────────
+
+  queryVt(type: 'ip' | 'domain' | 'hash' | 'url', value: string): void {
+    if (!value) return;
+    const key = `${type}:${value}`;
+    if (this.vtResults[key] !== undefined || this.vtLoading.has(key)) return;
+    this.vtLoading.add(key);
+    this.svc.vtLookup(type, value)
+      .pipe(
+        catchError(e => {
+          const notFound = e?.status === 404;
+          const errMsg   = e?.error?.detail || (notFound ? 'Not in VirusTotal' : 'VT lookup failed');
+          const fallback = type === 'ip'
+            ? `https://www.virustotal.com/gui/ip-address/${value}`
+            : type === 'domain'
+              ? `https://www.virustotal.com/gui/domain/${value}`
+              : type === 'hash'
+                ? `https://www.virustotal.com/gui/file/${value}`
+                : `https://www.virustotal.com/gui/search/${encodeURIComponent(value)}`;
+          return of({ _vtError: true, _notFound: notFound, error: errMsg, permalink: fallback } as any);
+        }),
+        finalize(() => this.vtLoading.delete(key))
+      )
+      .subscribe(r => (this.vtResults[key] = r));
+  }
+
+  vtGet(type: string, value: string): VtResult | null {
+    return value ? (this.vtResults[`${type}:${value}`] ?? null) : null;
+  }
+
+  isVtLoading(type: string, value: string): boolean {
+    return this.vtLoading.has(`${type}:${value}`);
+  }
+
+  vtTotal(r: VtResult): number {
+    if (!r?.stats) return 0;
+    const s = r.stats;
+    return (s.malicious || 0) + (s.suspicious || 0) + (s.harmless || 0) + (s.undetected || 0) + (s.timeout || 0);
+  }
+
+  vtBadgeClass(r: VtResult | null): string {
+    if (!r) return '';
+    if ((r as any)._vtError) return 'vt-unknown';
+    const v = (r.verdict || '').toLowerCase();
+    if (v === 'malicious')  return 'vt-malicious';
+    if (v === 'suspicious') return 'vt-suspicious';
+    if (v === 'clean')      return 'vt-clean';
+    return 'vt-unknown';
+  }
+
+  vtLabel(r: VtResult | null): string {
+    if (!r) return '';
+    if ((r as any)._vtError) return (r as any)._notFound ? '–' : '!';
+    return `${r.stats?.malicious ?? 0}/${this.vtTotal(r)}`;
   }
 }

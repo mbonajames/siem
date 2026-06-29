@@ -17,6 +17,8 @@ export const routes: Routes = [
       { path: 'devices',   loadComponent: () => import('./features/devices/devices.component').then(m => m.DevicesComponent) },
       { path: 'nessus',   loadComponent: () => import('./features/nessus/nessus.component').then(m => m.NessusComponent) },
       { path: 'jira',    loadComponent: () => import('./features/jira/jira-tickets.component').then(m => m.JiraTicketsComponent) },
+      { path: 'network-security', loadComponent: () => import('./features/network-security/network-security.component').then(m => m.NetworkSecurityComponent) },
+      { path: 'email-security',  loadComponent: () => import('./features/email-security/email-security.component').then(m => m.EmailSecurityComponent) },
       { path: 'my-dashboards',     loadComponent: () => import('./features/custom-dashboards/custom-dashboards.component').then(m => m.CustomDashboardsComponent) },
       { path: 'my-dashboards/:id', loadComponent: () => import('./features/custom-dashboards/dashboard-view/dashboard-view.component').then(m => m.DashboardViewComponent) },
       { path: '**', redirectTo: 'dashboard' },

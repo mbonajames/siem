@@ -1,319 +1,295 @@
 <div class="email-page">
 
-  <!-- ── Page header ── -->
-  <div class="page-header">
-    <div class="header-left">
-      <mat-icon class="header-icon">mark_email_unread</mat-icon>
-      <div>
-        <div class="page-title">Email Security Investigation</div>
-        <div class="page-sub">MS Graph · Advanced Hunting · Threat Explorer</div>
-      </div>
-    </div>
+  <!-- ── Tab bar ── -->
+  <div class="tab-bar">
     <div class="header-tabs">
       <button class="tab-btn" [class.active]="activeTab === 'list'" (click)="activeTab = 'list'">
-        <mat-icon>inbox</mat-icon> Threat Explorer
+        <mat-icon>inbox</mat-icon> Alerts
+      </button>
+      <button class="tab-btn" [class.active]="activeTab === 'incidents'" (click)="activeTab = 'incidents'">
+        <mat-icon>account_tree</mat-icon> Incidents
+        @if (incidents.length > 0) { <span class="tab-count">{{ incidents.length }}</span> }
       </button>
       <button class="tab-btn" [class.active]="activeTab === 'hunt'" (click)="activeTab = 'hunt'">
         <mat-icon>manage_search</mat-icon> Advanced Hunting
       </button>
     </div>
-    <div class="header-right">
-      <button class="btn-icon" (click)="showFilterBar = !showFilterBar" title="Toggle filters">
-        <mat-icon>filter_list</mat-icon>
-      </button>
-      <button class="btn-refresh" (click)="loadAll()">
-        <mat-icon>refresh</mat-icon>
-      </button>
-    </div>
+    <button class="btn-refresh" (click)="loadAll()" title="Refresh">
+      <mat-icon>refresh</mat-icon>
+    </button>
   </div>
 
-  <!-- ── Stat tiles ── -->
-  <div class="stat-row">
-    <div class="stat-tile" (click)="filterInputs.threat_type = ''; applyFilters()">
-      <div class="tile-label">Total Threats</div>
-      <div class="tile-val orange">{{ stats.Total }}</div>
+  <!-- ── Filters ── -->
+  <div class="filter-strip">
+    <div class="fs-group">
+      <span class="fs-label">Period</span>
+      @for (d of [1, 7, 14, 30, 90]; track d) {
+        <button class="fs-btn" [class.active]="days === d" (click)="setDays(d)">
+          {{ d === 1 ? '24h' : d + 'd' }}
+        </button>
+      }
     </div>
-    <div class="stat-tile" (click)="filterInputs.threat_type = 'Phish'; applyFilters()">
-      <div class="tile-label">Phishing</div>
-      <div class="tile-val crit">{{ stats.Phishing }}</div>
+    <div class="fs-divider"></div>
+    <div class="fs-group">
+      <span class="fs-label">Severity</span>
+      @for (s of [{v:'',l:'All'},{v:'high',l:'High'},{v:'medium',l:'Med'},{v:'low',l:'Low'},{v:'informational',l:'Info'}]; track s.v) {
+        <button class="fs-btn" [class.active]="filterSeverity === s.v" [class]="s.v ? 'fs-btn sev-' + s.v : 'fs-btn'" (click)="filterSeverity = s.v">{{ s.l }}</button>
+      }
     </div>
-    <div class="stat-tile" (click)="filterInputs.threat_type = 'Malware'; applyFilters()">
-      <div class="tile-label">Malware</div>
-      <div class="tile-val high">{{ stats.Malware }}</div>
+    <div class="fs-divider"></div>
+    <div class="fs-group">
+      <span class="fs-label">Status</span>
+      @for (s of [{v:'',l:'All'},{v:'new',l:'New'},{v:'inprogress',l:'Active'},{v:'resolved',l:'Resolved'}]; track s.v) {
+        <button class="fs-btn" [class.active]="filterStatus === s.v" (click)="filterStatus = s.v">{{ s.l }}</button>
+      }
     </div>
-    <div class="stat-tile" (click)="filterInputs.threat_type = 'Spam'; applyFilters()">
-      <div class="tile-label">Spam</div>
-      <div class="tile-val med">{{ stats.Spam }}</div>
-    </div>
-    <div class="stat-tile" (click)="filterInputs.threat_type = 'BusinessEmailCompromise'; applyFilters()">
-      <div class="tile-label">BEC</div>
-      <div class="tile-val purple">{{ stats.BEC }}</div>
-    </div>
-    <div class="stat-tile">
-      <div class="tile-label">Blocked</div>
-      <div class="tile-val ok">{{ stats.Blocked }}</div>
-    </div>
-    <div class="stat-tile">
-      <div class="tile-label">Quarantined</div>
-      <div class="tile-val info">{{ stats.Quarantined }}</div>
-    </div>
-    <div class="stat-tile">
-      <div class="tile-label">Delivered</div>
-      <div class="tile-val muted">{{ stats.Delivered }}</div>
-    </div>
+    @if (filterSeverity || filterStatus) {
+      <button class="fs-clear" (click)="filterSeverity = ''; filterStatus = ''">
+        <mat-icon>close</mat-icon> Clear
+      </button>
+    }
   </div>
+
+  <!-- ── Generic API error banner ── -->
+  @if (apiError) {
+    <div class="api-error-banner">
+      <mat-icon>error_outline</mat-icon>
+      <div>
+        <strong>Email Security unavailable</strong>
+        <div class="api-error-detail">{{ apiError }}</div>
+      </div>
+    </div>
+  }
 
   <!-- ── THREAT EXPLORER TAB ── -->
   @if (activeTab === 'list') {
 
-    <!-- Filter bar -->
-    @if (showFilterBar) {
-      <div class="filter-bar">
-        <input class="f-input" [(ngModel)]="filterInputs.sender"          placeholder="Sender address" />
-        <input class="f-input" [(ngModel)]="filterInputs.recipient"       placeholder="Recipient address" />
-        <input class="f-input" [(ngModel)]="filterInputs.subject"         placeholder="Subject contains…" />
-        <select class="f-select" [(ngModel)]="filterInputs.threat_type">
-          <option value="">All threats</option>
-          <option value="Phish">Phishing</option>
-          <option value="Malware">Malware</option>
-          <option value="Spam">Spam</option>
-          <option value="BusinessEmailCompromise">BEC</option>
-        </select>
-        <select class="f-select" [(ngModel)]="filterInputs.delivery_action">
-          <option value="">Any delivery</option>
-          <option value="Delivered">Delivered</option>
-          <option value="Blocked">Blocked</option>
-          <option value="Quarantined">Quarantined</option>
-          <option value="Replaced">Replaced</option>
-        </select>
-        <select class="f-select narrow" [(ngModel)]="filterInputs.days">
-          <option [value]="1">24h</option>
-          <option [value]="7">7d</option>
-          <option [value]="14">14d</option>
-          <option [value]="30">30d</option>
-        </select>
-        <button class="btn-apply" (click)="applyFilters()">
-          <mat-icon>search</mat-icon> Search
-        </button>
-        <button class="btn-clear" (click)="clearFilters()">
-          <mat-icon>clear</mat-icon>
-        </button>
+    <!-- Email accordion list -->
+    <div class="card list-card">
+      <div class="card-head">
+        <span>Alerts</span>
+        <span class="result-count">{{ filteredEmails.length }}{{ filteredEmails.length !== emails.length ? ' / ' + emails.length : '' }} results</span>
+        @if (loading) { <span class="spin-dot"></span> }
       </div>
-    }
 
-    <!-- Main panel: list + detail -->
-    <div class="main-panels" [class.detail-open]="!!selectedEmail">
-
-      <!-- Email list -->
-      <div class="card list-card">
-        <div class="card-head">
-          <span>Emails</span>
-          <span class="result-count">{{ emails.length }} results</span>
-          @if (loading) { <span class="spin-dot"></span> }
+      @if (!loading && filteredEmails.length === 0) {
+        <div class="empty-state">
+          <mat-icon>search_off</mat-icon>
+          <span>No alerts match the current filters.</span>
         </div>
+      }
 
-        @if (!loading && emails.length === 0) {
-          <div class="empty-state">
-            <mat-icon>search_off</mat-icon>
-            <span>No emails matched. Adjust filters or check API connectivity.</span>
-          </div>
+      @if (filteredEmails.length > 0) {
+        <div class="ep-col-headers">
+          <span class="eph-sev"></span>
+          <span class="eph-threat">Threat</span>
+          <span class="eph-sender">Sender</span>
+          <span class="eph-subject">Subject</span>
+          <span class="eph-recipient">Recipient</span>
+          <span class="eph-delivery">Delivery</span>
+          <span class="eph-iocs">IOCs</span>
+          <span class="eph-date">Date</span>
+          <span class="eph-toggle"></span>
+        </div>
+      }
+
+      <mat-accordion class="email-accordion" [multi]="false">
+        @for (em of filteredEmails; track em.NetworkMessageId) {
+          <mat-expansion-panel class="ep-row" (opened)="selectEmail(em)">
+
+            <mat-expansion-panel-header collapsedHeight="46px" expandedHeight="46px">
+              <mat-panel-title class="ep-header">
+                <span class="eph-sev">
+                  <span class="sev-dot" [ngClass]="severityClass(em.Severity)" [title]="em.Severity || 'unknown'"></span>
+                </span>
+                <span class="eph-threat">
+                  <span class="threat-pill" [ngClass]="getThreatClass(em.ThreatTypes)">{{ getThreatLabel(em.ThreatTypes) }}</span>
+                </span>
+                <span class="eph-sender">
+                  <span class="ep-addr">{{ em.SenderFromAddress || '—' }}</span>
+                  @if (em.SenderDomain) { <span class="ep-dom">{{ em.SenderDomain }}</span> }
+                </span>
+                <span class="eph-subject ep-trunc">{{ em.Subject || em.AlertTitle }}</span>
+                <span class="eph-recipient ep-trunc">{{ em.RecipientEmailAddress || '—' }}</span>
+                <span class="eph-delivery">
+                  @if (em.DeliveryAction) {
+                    <span class="del-badge" [ngClass]="getDeliveryClass(em.DeliveryAction)">{{ em.DeliveryAction }}</span>
+                  }
+                </span>
+                <span class="eph-iocs">
+                  @if (em.UrlCount > 0) { <span class="ioc-count"><mat-icon>link</mat-icon>{{ em.UrlCount }}</span> }
+                  @if (em.AttachmentCount > 0) { <span class="ioc-count"><mat-icon>attach_file</mat-icon>{{ em.AttachmentCount }}</span> }
+                  @if (em.IpCount > 0) { <span class="ioc-count"><mat-icon>router</mat-icon>{{ em.IpCount }}</span> }
+                </span>
+                <span class="eph-date">{{ formatDate(em.Timestamp) }}</span>
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+
+            <!-- ── Expanded detail ── -->
+            <div class="ep-body">
+              <ng-container [ngTemplateOutlet]="alertBody" [ngTemplateOutletContext]="{em: em}"></ng-container>
+            </div>
+          </mat-expansion-panel>
         }
+      </mat-accordion>
+    </div><!-- end list-card -->
+  }
 
-        <div class="email-table-wrap">
-          <table class="email-table">
-            <thead>
-              <tr>
-                <th>Threat</th>
-                <th>Sender</th>
-                <th>Subject</th>
-                <th>Recipient</th>
-                <th>Delivery</th>
-                <th>Date</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (em of emails; track em.NetworkMessageId) {
-                <tr [class.row-selected]="selectedEmail?.NetworkMessageId === em.NetworkMessageId"
-                    (click)="selectEmail(em)">
-                  <td>
-                    <span class="threat-pill" [ngClass]="getThreatClass(em.ThreatTypes)">
-                      {{ getThreatLabel(em.ThreatTypes) }}
-                    </span>
-                  </td>
-                  <td class="cell-sender">
-                    <div class="sender-name">{{ em.SenderDisplayName || em.SenderFromAddress }}</div>
-                    <div class="sender-addr">{{ em.SenderFromAddress }}</div>
-                  </td>
-                  <td class="cell-subject">{{ em.Subject }}</td>
-                  <td class="cell-recipient">{{ em.RecipientEmailAddress }}</td>
-                  <td>
-                    <span class="del-badge" [ngClass]="getDeliveryClass(em.DeliveryAction)">
-                      {{ em.DeliveryAction }}
-                    </span>
-                  </td>
-                  <td class="cell-date">{{ formatDate(em.Timestamp) }}</td>
-                  <td class="cell-actions" (click)="$event.stopPropagation()">
-                    <button class="act-icon" title="Quarantine" (click)="openAction(em, 'quarantine')">
-                      <mat-icon>lock</mat-icon>
-                    </button>
-                    <button class="act-icon del" title="Soft delete" (click)="openAction(em, 'soft_delete')">
-                      <mat-icon>delete_outline</mat-icon>
-                    </button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
+  <!-- ── INCIDENTS TAB ── -->
+  @if (activeTab === 'incidents') {
+    <div class="incidents-panel">
+
+      <!-- Stat tiles -->
+      <div class="inc-stat-row">
+        <div class="inc-stat-tile">
+          <div class="ist-label">Total</div>
+          <div class="ist-val">{{ incidentStats.total }}</div>
+        </div>
+        <div class="inc-stat-tile">
+          <div class="ist-label">Active</div>
+          <div class="ist-val warn">{{ incidentStats.active }}</div>
+        </div>
+        <div class="inc-stat-tile">
+          <div class="ist-label">Resolved</div>
+          <div class="ist-val ok">{{ incidentStats.resolved }}</div>
+        </div>
+        <div class="inc-stat-tile">
+          <div class="ist-label">High Severity</div>
+          <div class="ist-val crit">{{ incidentStats.high }}</div>
         </div>
       </div>
 
-      <!-- Detail panel -->
-      @if (selectedEmail) {
-        <div class="card detail-card">
-          <div class="detail-top">
-            <div class="detail-subject">{{ selectedEmail.Subject }}</div>
-            <button class="btn-close" (click)="closeDetail()"><mat-icon>close</mat-icon></button>
-          </div>
+      @if (incidentsError) {
+        <div class="api-error-banner">
+          <mat-icon>error_outline</mat-icon>
+          <div><strong>Could not load incidents</strong><div class="api-error-detail">{{ incidentsError }}</div></div>
+        </div>
+      }
 
-          <!-- Sender / recipient meta -->
-          <div class="detail-meta-grid">
-            <div class="dm-row">
-              <span class="dm-label">From</span>
-              <span class="dm-val">{{ selectedEmail.SenderDisplayName }} &lt;{{ selectedEmail.SenderFromAddress }}&gt;</span>
-            </div>
-            <div class="dm-row">
-              <span class="dm-label">To</span>
-              <span class="dm-val">{{ selectedEmail.RecipientEmailAddress }}</span>
-            </div>
-            <div class="dm-row">
-              <span class="dm-label">Date</span>
-              <span class="dm-val">{{ formatDate(selectedEmail.Timestamp) }}</span>
-            </div>
-            <div class="dm-row">
-              <span class="dm-label">Sender IP</span>
-              <span class="dm-val mono">{{ selectedEmail.SenderIPv4 || '—' }}</span>
-            </div>
-            <div class="dm-row">
-              <span class="dm-label">Message ID</span>
-              <span class="dm-val mono small">{{ selectedEmail.InternetMessageId }}</span>
-            </div>
-          </div>
+      @if (incidentsLoading) {
+        <div class="detail-loading"><span class="spin-dot"></span> Loading incidents from Defender…</div>
+      }
 
-          <!-- Threat + Delivery -->
-          <div class="detail-badges">
-            <span class="threat-pill lg" [ngClass]="getThreatClass(selectedEmail.ThreatTypes)">
-              <mat-icon class="pill-icon">warning</mat-icon>
-              {{ getThreatLabel(selectedEmail.ThreatTypes) }}
+      @if (!incidentsLoading && filteredIncidents.length === 0 && !incidentsError) {
+        <div class="empty-state">
+          <mat-icon>account_tree</mat-icon>
+          <span>No incidents found for the selected period and filters.</span>
+        </div>
+      }
+
+      @if (filteredIncidents.length > 0) {
+        <div class="card list-card">
+          <div class="card-head">
+            <span>Incidents</span>
+            <span class="result-count">
+              {{ filteredIncidents.length }}{{ filteredIncidents.length !== incidents.length ? ' / ' + incidents.length : '' }} incidents
             </span>
-            <span class="del-badge lg" [ngClass]="getDeliveryClass(selectedEmail.DeliveryAction)">
-              {{ selectedEmail.DeliveryAction }}
-            </span>
-            @if (selectedEmail.DeliveryLocation) {
-              <span class="loc-badge">{{ selectedEmail.DeliveryLocation }}</span>
-            }
+            @if (incidentsLoading) { <span class="spin-dot"></span> }
           </div>
 
-          <!-- Auth results -->
-          <div class="section-label">Authentication</div>
-          <div class="auth-row">
-            @for (key of ['SPF', 'DKIM', 'DMARC']; track key) {
-              <div class="auth-chip">
-                <div class="auth-key">{{ key }}</div>
-                <div class="auth-val" [ngClass]="authClass(getAuthResult(selectedEmail.AuthenticationDetails, key))">
-                  {{ getAuthResult(selectedEmail.AuthenticationDetails, key) }}
-                </div>
+          <!-- Column headers -->
+          <div class="inc-col-headers">
+            <span class="ich-sev"></span>
+            <span class="ich-title">Incident</span>
+            <span class="ich-status">Status</span>
+            <span class="ich-alerts">Alerts</span>
+            <span class="ich-services">Sources</span>
+            <span class="ich-cats">Categories</span>
+            <span class="ich-date">Last updated</span>
+            <span class="ich-toggle"></span>
+          </div>
+
+          @for (inc of filteredIncidents; track inc.id) {
+            <div class="inc-group">
+              <!-- Incident header row -->
+              <div class="inc-group-header" (click)="toggleIncident(inc.id)">
+                <span class="ich-sev">
+                  <span class="sev-dot" [ngClass]="severityClass(incidentHighestSeverity(inc))" [title]="inc.severity"></span>
+                </span>
+                <span class="ich-title">
+                  <span class="inc-group-title">{{ inc.title }}</span>
+                  <span class="inc-group-id">ID: {{ inc.id }}</span>
+                </span>
+                <span class="ich-status">
+                  <span class="status-badge" [ngClass]="statusClass(inc.status)">{{ inc.status || '—' }}</span>
+                  @if (inc.classification) { <span class="classify-badge">{{ inc.classification }}</span> }
+                </span>
+                <span class="ich-alerts">
+                  <span class="alert-count-badge">{{ inc.alerts.length }}</span>
+                </span>
+                <span class="ich-services">
+                  @for (svc of uniqueServices(inc); track svc) { <span class="svc-chip">{{ svc }}</span> }
+                </span>
+                <span class="ich-cats">
+                  @for (cat of uniqueCategories(inc); track cat) {
+                    <span class="threat-pill" [ngClass]="getThreatClass(cat)">{{ cat }}</span>
+                  }
+                </span>
+                <span class="ich-date">{{ formatDate(inc.lastUpdated) }}</span>
+                <span class="ich-toggle">
+                  <mat-icon>{{ expandedIncidentIds.has(inc.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                </span>
               </div>
-            }
-            <div class="auth-chip">
-              <div class="auth-key">URLs</div>
-              <div class="auth-val">{{ selectedEmail.UrlCount }}</div>
-            </div>
-            <div class="auth-chip">
-              <div class="auth-key">Attachments</div>
-              <div class="auth-val">{{ selectedEmail.AttachmentCount }}</div>
-            </div>
-          </div>
 
-          @if (detailLoading) {
-            <div class="detail-loading">
-              <span class="spin-dot"></span> Loading URLs &amp; attachments…
-            </div>
-          }
+              <!-- Expanded incident body -->
+              @if (expandedIncidentIds.has(inc.id)) {
+                <div class="inc-group-body">
 
-          @if (detail && !detailLoading) {
-            <!-- URLs -->
-            @if (detail.urls.length > 0) {
-              <div class="section-label">URLs ({{ detail.urls.length }})</div>
-              <div class="url-list">
-                @for (u of detail.urls; track u.Url) {
-                  <div class="url-row" [class.url-threat]="isUrlThreat(u)">
-                    <div class="url-domain">{{ u.UrlDomain }}</div>
-                    <div class="url-full">{{ u.Url }}</div>
-                    @if (u.ThreatTypes) {
-                      <span class="url-threat-pill">{{ u.ThreatTypes }}</span>
+                  <!-- Incident meta -->
+                  <div class="inc-meta-row">
+                    @if (inc.assignedTo) { <span class="inc-assigned"><mat-icon>person</mat-icon>{{ inc.assignedTo }}</span> }
+                    @if (inc.determination) { <span class="classify-badge muted">{{ inc.determination }}</span> }
+                    @for (tag of inc.tags; track tag) { <span class="inc-tag">{{ tag }}</span> }
+                    @if (inc.incidentUrl) {
+                      <a class="btn-incident-link" [href]="inc.incidentUrl" target="_blank" rel="noopener">
+                        <mat-icon>open_in_new</mat-icon> Open in Defender
+                      </a>
                     }
                   </div>
-                }
-              </div>
-            }
 
-            <!-- Attachments -->
-            @if (detail.attachments.length > 0) {
-              <div class="section-label">Attachments ({{ detail.attachments.length }})</div>
-              <div class="att-list">
-                @for (a of detail.attachments; track a.SHA256) {
-                  <div class="att-row" [class.att-threat]="a.ThreatTypes">
-                    <mat-icon class="att-icon">attach_file</mat-icon>
-                    <div class="att-info">
-                      <div class="att-name">{{ a.FileName }}</div>
-                      <div class="att-meta">{{ a.FileType }} · {{ a.FileSize | number }} bytes</div>
-                      @if (a.ThreatTypes) {
-                        <div class="att-threat-label">{{ a.ThreatTypes }}</div>
-                      }
-                      <div class="att-hash">{{ a.SHA256 }}</div>
+                  <!-- Alert rows -->
+                  <div class="inc-alert-list">
+                    <div class="inc-alert-col-headers">
+                      <span class="iac-sev"></span>
+                      <span class="iac-threat">Category</span>
+                      <span class="iac-sender">Source</span>
+                      <span class="iac-subject">Alert title</span>
+                      <span class="iac-delivery">Status</span>
+                      <span class="iac-date">Created</span>
+                      <span class="iac-link"></span>
                     </div>
+                    @for (ia of inc.alerts; track ia.id) {
+                      <div class="inc-alert-row">
+                        <div class="inc-alert-header" (click)="toggleAlertRow(ia.id)">
+                          <span class="iac-sev">
+                            <span class="sev-dot" [ngClass]="severityClass(ia.severity)" [title]="ia.severity"></span>
+                          </span>
+                          <span class="iac-threat">
+                            <span class="threat-pill" [ngClass]="getThreatClass(ia.category)">{{ getThreatLabel(ia.category) || ia.category || '—' }}</span>
+                          </span>
+                          <span class="iac-sender ep-trunc">{{ ia.serviceSource || '—' }}</span>
+                          <span class="iac-subject ep-trunc">{{ ia.title }}</span>
+                          <span class="iac-delivery">
+                            <span class="status-badge" [ngClass]="statusClass(ia.status)">{{ ia.status || '—' }}</span>
+                          </span>
+                          <span class="iac-date">{{ formatDate(ia.createdAt) }}</span>
+                          <span class="iac-link">
+                            <mat-icon class="expand-caret">{{ expandedAlertIds.has(ia.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                          </span>
+                        </div>
+                        @if (expandedAlertIds.has(ia.id)) {
+                          <div class="inc-alert-detail">
+                            <ng-container [ngTemplateOutlet]="incidentAlertBody" [ngTemplateOutletContext]="{ia: ia}"></ng-container>
+                          </div>
+                        }
+                      </div>
+                    }
                   </div>
-                }
-              </div>
-            }
 
-            <!-- Post-delivery events -->
-            @if (detail.post_delivery.length > 0) {
-              <div class="section-label">Post-Delivery Events</div>
-              <div class="post-list">
-                @for (p of detail.post_delivery; track p.Timestamp) {
-                  <div class="post-row">
-                    <mat-icon class="post-icon">history</mat-icon>
-                    <div>
-                      <div class="post-action">{{ p.ActionType }} · {{ p.ActionResult }}</div>
-                      <div class="post-meta">{{ p.ActionTrigger }} · {{ formatDate(p.Timestamp) }}</div>
-                    </div>
-                  </div>
-                }
-              </div>
-            }
+                </div>
+              }
+            </div>
           }
-
-          <!-- Remediation actions -->
-          <div class="section-label">Remediation</div>
-          <div class="action-row">
-            <button class="rem-btn quarantine" (click)="openAction(selectedEmail, 'quarantine')">
-              <mat-icon>lock</mat-icon> Quarantine
-            </button>
-            <button class="rem-btn soft-del" (click)="openAction(selectedEmail, 'soft_delete')">
-              <mat-icon>delete_outline</mat-icon> Soft Delete
-            </button>
-            <button class="rem-btn hard-del" (click)="openAction(selectedEmail, 'hard_delete')">
-              <mat-icon>delete_forever</mat-icon> Hard Delete
-            </button>
-            <button class="rem-btn inbox" (click)="openAction(selectedEmail, 'move_inbox')">
-              <mat-icon>move_to_inbox</mat-icon> Move to Inbox
-            </button>
-            <button class="rem-btn junk" (click)="openAction(selectedEmail, 'move_junk')">
-              <mat-icon>report</mat-icon> Move to Junk
-            </button>
-          </div>
         </div>
       }
 
@@ -323,6 +299,7 @@
   <!-- ── ADVANCED HUNTING TAB ── -->
   @if (activeTab === 'hunt') {
     <div class="hunt-panel">
+
       <div class="hunt-editor-wrap">
         <div class="hunt-label">KQL Query</div>
         <textarea class="hunt-editor" [(ngModel)]="huntQuery" rows="10" spellcheck="false"></textarea>
@@ -331,12 +308,24 @@
             <mat-icon>{{ huntLoading ? 'hourglass_top' : 'play_arrow' }}</mat-icon>
             {{ huntLoading ? 'Running…' : 'Run Query' }}
           </button>
-          <span class="hunt-hint">Uses Microsoft Graph <code>runHuntingQuery</code> — EmailEvents, EmailUrlInfo, EmailAttachmentInfo</span>
+          <span class="hunt-hint">
+            Requires <code>ThreatHunting.Read.All</code> — EmailEvents, EmailUrlInfo, EmailAttachmentInfo
+          </span>
         </div>
       </div>
 
-      @if (huntError) {
+      @if (huntError && huntError !== 'PERMISSION_DENIED') {
         <div class="hunt-error"><mat-icon>error</mat-icon> {{ huntError }}</div>
+      }
+      @if (huntError === 'PERMISSION_DENIED') {
+        <div class="hunt-perm-block">
+          <mat-icon class="hunt-perm-icon">lock</mat-icon>
+          <div class="hunt-perm-title">Advanced Hunting requires additional permissions</div>
+          <div class="hunt-perm-desc">
+            Grant <code>ThreatHunting.Read.All</code> (Application) on your Defender service principal in Azure AD,
+            then click <strong>Grant admin consent</strong> and restart the API gateway.
+          </div>
+        </div>
       }
 
       @if (huntResults !== null && !huntLoading) {
@@ -369,6 +358,7 @@
           </div>
         </div>
       }
+
     </div>
   }
 
@@ -405,3 +395,532 @@
   }
 
 </div>
+
+<!-- ── Incident alert detail (DefenderIncidentAlert from Graph API) ── -->
+<ng-template #incidentAlertBody let-ia="ia">
+
+  <!-- Portal link + status bar -->
+  <div class="ep-topbar">
+    @if (ia.alertUrl) {
+      <a class="btn-defender-portal" [href]="ia.alertUrl" target="_blank" rel="noopener">
+        <mat-icon>open_in_new</mat-icon> Open in Defender
+      </a>
+    }
+  </div>
+
+  <div class="alert-status-bar">
+    <span class="sev-badge" [ngClass]="severityClass(ia.severity)">{{ ia.severity }}</span>
+    <span class="status-badge" [ngClass]="statusClass(ia.status)">{{ ia.status || '—' }}</span>
+    @if (ia.classification) { <span class="classify-badge">{{ ia.classification }}</span> }
+    @if (ia.determination)  { <span class="classify-badge muted">{{ ia.determination }}</span> }
+    @if (ia.detectionSource){ <span class="src-badge"><mat-icon>radar</mat-icon>{{ ia.detectionSource }}</span> }
+    @if (ia.assignedTo)     { <span class="src-badge"><mat-icon>person</mat-icon>{{ ia.assignedTo }}</span> }
+  </div>
+
+  @if (ia.description) { <div class="alert-desc">{{ ia.description }}</div> }
+
+  <div class="detail-badges">
+    @if (ia.category) {
+      <span class="threat-pill lg" [ngClass]="getThreatClass(ia.category)">
+        <mat-icon class="pill-icon">warning</mat-icon>{{ ia.category }}
+      </span>
+    }
+    @if (ia.threatFamily) { <span class="threat-family-badge"><mat-icon>bug_report</mat-icon> {{ ia.threatFamily }}</span> }
+    @if (ia.actor)        { <span class="threat-family-badge actor"><mat-icon>person_pin</mat-icon> {{ ia.actor }}</span> }
+  </div>
+
+  <!-- Email evidence -->
+  @if (evidenceOf(ia, 'email').length > 0) {
+    <div class="section-label">Email ({{ evidenceOf(ia, 'email').length }})</div>
+    <div class="detail-meta-grid">
+      @for (e of evidenceOf(ia, 'email'); track e.message_id) {
+        @if (e.sender) {
+          <div class="dm-row">
+            <span class="dm-label">From</span>
+            <span class="dm-val">{{ e.sender }} @if (e.sender_domain) { <span class="dm-sub">({{ e.sender_domain }})</span> }</span>
+            @if (e.sender_domain) {
+              <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'domain',val:e.sender_domain}"></ng-container>
+            }
+          </div>
+        }
+        @if (e.sender_ip) {
+          <div class="dm-row">
+            <span class="dm-label">Sender IP</span>
+            <span class="dm-val mono">{{ e.sender_ip }}</span>
+            <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'ip',val:e.sender_ip}"></ng-container>
+          </div>
+        }
+        @if (e.recipient) {
+          <div class="dm-row"><span class="dm-label">To</span><span class="dm-val">{{ e.recipient }}</span></div>
+        }
+        @if (e.subject) {
+          <div class="dm-row"><span class="dm-label">Subject</span><span class="dm-val">{{ e.subject }}</span></div>
+        }
+        @if (e.delivery) {
+          <div class="dm-row">
+            <span class="dm-label">Delivery</span>
+            <span class="del-badge" [ngClass]="getDeliveryClass(e.delivery)">{{ e.delivery }}</span>
+          </div>
+        }
+        @if (e.sha256) {
+          <div class="dm-row">
+            <span class="dm-label">SHA256</span>
+            <span class="dm-val mono small">{{ e.sha256 }}</span>
+            <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'hash',val:e.sha256}"></ng-container>
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <!-- Mailbox evidence -->
+  @if (evidenceOf(ia, 'mailbox').length > 0) {
+    <div class="section-label">Affected Mailboxes ({{ evidenceOf(ia, 'mailbox').length }})</div>
+    <div class="user-list">
+      @for (e of evidenceOf(ia, 'mailbox'); track $index) {
+        <div class="user-row">
+          <mat-icon class="user-icon">account_circle</mat-icon>
+          <div class="user-info">
+            <div class="user-upn">{{ e.raw?.['primaryAddress'] || e.raw?.['userAccount']?.['userPrincipalName'] || '—' }}</div>
+            @if (e.raw?.['userAccount']?.['displayName']) {
+              <div class="user-display">{{ e.raw?.['userAccount']?.['displayName'] }}</div>
+            }
+          </div>
+          @if (e.verdict) { <span class="ev-verdict" [ngClass]="verdictClass(e.verdict)">{{ e.verdict }}</span> }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- User evidence -->
+  @if (evidenceOf(ia, 'user').length > 0) {
+    <div class="section-label">Users ({{ evidenceOf(ia, 'user').length }})</div>
+    <div class="user-list">
+      @for (e of evidenceOf(ia, 'user'); track e.upn) {
+        <div class="user-row">
+          <mat-icon class="user-icon">person</mat-icon>
+          <div class="user-info">
+            <div class="user-upn">{{ e.upn || e.account }}</div>
+            @if (e.display_name) { <div class="user-display">{{ e.display_name }}</div> }
+            @if (e.domain)       { <div class="user-domain">{{ e.domain }}</div> }
+          </div>
+          @if (e.verdict) { <span class="ev-verdict" [ngClass]="verdictClass(e.verdict)">{{ e.verdict }}</span> }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- IP evidence -->
+  @if (evidenceOf(ia, 'ip').length > 0) {
+    <div class="section-label">IP Addresses ({{ evidenceOf(ia, 'ip').length }})</div>
+    <div class="ip-list">
+      @for (e of evidenceOf(ia, 'ip'); track e.ip) {
+        <div class="ip-row">
+          <mat-icon class="ip-icon">router</mat-icon>
+          <span class="ip-addr mono">{{ e.ip }}</span>
+          @if (e.country) { <span class="ip-country">{{ e.country }}</span> }
+          @if (e.verdict) { <span class="ev-verdict" [ngClass]="verdictClass(e.verdict)">{{ e.verdict }}</span> }
+          <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'ip',val:e.ip}"></ng-container>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- URL evidence -->
+  @if (evidenceOf(ia, 'url').length > 0) {
+    <div class="section-label">URLs ({{ evidenceOf(ia, 'url').length }})</div>
+    <div class="url-list">
+      @for (e of evidenceOf(ia, 'url'); track e.url) {
+        <div class="url-row">
+          <div class="url-row-top">
+            <span class="url-domain">{{ e.url }}</span>
+            @if (e.verdict) { <span class="ev-verdict" [ngClass]="verdictClass(e.verdict)">{{ e.verdict }}</span> }
+            @if (e.url) {
+              <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'url',val:e.url}"></ng-container>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- File evidence -->
+  @if (evidenceOf(ia, 'file').length > 0) {
+    <div class="section-label">Files ({{ evidenceOf(ia, 'file').length }})</div>
+    <div class="att-list">
+      @for (e of evidenceOf(ia, 'file'); track e.sha256) {
+        <div class="att-row">
+          <mat-icon class="att-icon">insert_drive_file</mat-icon>
+          <div class="att-info">
+            <div class="att-name-row">
+              <span class="att-name">{{ e.name || '(unknown)' }}</span>
+              @if (e.verdict) { <span class="ev-verdict" [ngClass]="verdictClass(e.verdict)">{{ e.verdict }}</span> }
+            </div>
+            @if (e.path) { <div class="att-path">{{ e.path }}</div> }
+            @if (e.sha256) {
+              <div class="att-hash-row">
+                <span class="att-hash">SHA256: {{ e.sha256 }}</span>
+                <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'hash',val:e.sha256}"></ng-container>
+              </div>
+            }
+            @if (e.sha1) { <div class="att-hash">SHA1: {{ e.sha1 }}</div> }
+            @if (e.md5)  { <div class="att-hash">MD5: {{ e.md5 }}</div> }
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Device evidence -->
+  @if (evidenceOf(ia, 'device').length > 0) {
+    <div class="section-label">Devices ({{ evidenceOf(ia, 'device').length }})</div>
+    <div class="detail-meta-grid">
+      @for (e of evidenceOf(ia, 'device'); track e.hostname) {
+        <div class="dm-row">
+          <span class="dm-label">Host</span>
+          <span class="dm-val">{{ e.hostname }}</span>
+          @if (e.verdict) { <span class="ev-verdict" [ngClass]="verdictClass(e.verdict)">{{ e.verdict }}</span> }
+        </div>
+        @if (e.ip)  { <div class="dm-row"><span class="dm-label">IP</span><span class="dm-val mono">{{ e.ip }}</span></div> }
+        @if (e.os)  { <div class="dm-row"><span class="dm-label">OS</span><span class="dm-val">{{ e.os }}</span></div> }
+      }
+    </div>
+  }
+
+  <!-- MITRE ATT&CK -->
+  @if ((ia.mitreTechniques?.length ?? 0) > 0) {
+    <div class="section-label">MITRE ATT&amp;CK</div>
+    <div class="mitre-chips">
+      @for (t of ia.mitreTechniques; track t.id) {
+        <div class="mitre-chip">
+          <span class="mitre-id">{{ t.id }}</span>
+          <span class="mitre-name">{{ t.technique }}</span>
+          @if ((t.tactics?.length ?? 0) > 0) { <span class="mitre-tactics">{{ t.tactics.join(', ') }}</span> }
+        </div>
+      }
+    </div>
+  }
+
+</ng-template>
+
+<!-- ── Full alert detail body (reused in Alerts accordion + Incidents expanded rows) ── -->
+<ng-template #alertBody let-em="em">
+
+  <!-- Portal links -->
+  <div class="ep-topbar">
+    @if (em.AlertUrl) {
+      <a class="btn-defender-portal" [href]="em.AlertUrl" target="_blank" rel="noopener">
+        <mat-icon>open_in_new</mat-icon> Open in Defender
+      </a>
+    }
+    @if (em.IncidentId && em.IncidentUrl) {
+      <a class="btn-incident-link" [href]="em.IncidentUrl" target="_blank" rel="noopener">
+        <mat-icon>account_tree</mat-icon> Incident {{ em.IncidentId }}
+      </a>
+    } @else if (em.IncidentId) {
+      <span class="incident-badge-tag"><mat-icon>account_tree</mat-icon>Incident {{ em.IncidentId }}</span>
+    }
+  </div>
+
+  <!-- Status bar -->
+  <div class="alert-status-bar">
+    <span class="sev-badge" [ngClass]="severityClass(em.Severity)">{{ em.Severity || 'unknown' }}</span>
+    <span class="status-badge" [ngClass]="statusClass(em.Status)">{{ em.Status || '—' }}</span>
+    @if (em.Classification) { <span class="classify-badge">{{ em.Classification }}</span> }
+    @if (em.Determination)  { <span class="classify-badge muted">{{ em.Determination }}</span> }
+    @if (em.DetectionSource) {
+      <span class="src-badge"><mat-icon>radar</mat-icon>{{ em.DetectionSource }}</span>
+    }
+    @if (em.IncidentId) {
+      <span class="incident-badge">
+        <mat-icon>account_tree</mat-icon>
+        @if (em.IncidentUrl) {
+          <a [href]="em.IncidentUrl" target="_blank" rel="noopener">Incident {{ em.IncidentId }}</a>
+        } @else { Incident {{ em.IncidentId }} }
+      </span>
+    }
+  </div>
+
+  @if (em.AlertDescription) { <div class="alert-desc">{{ em.AlertDescription }}</div> }
+
+  <!-- Threat badges -->
+  <div class="detail-badges">
+    <span class="threat-pill lg" [ngClass]="getThreatClass(em.ThreatTypes)">
+      <mat-icon class="pill-icon">warning</mat-icon>{{ getThreatLabel(em.ThreatTypes) }}
+    </span>
+    @if (em.DeliveryAction) {
+      <span class="del-badge lg" [ngClass]="getDeliveryClass(em.DeliveryAction)">{{ em.DeliveryAction }}</span>
+    }
+    @if (em.Verdict) {
+      <span class="verdict-badge" [ngClass]="verdictClass(em.Verdict)">
+        <mat-icon>verified_user</mat-icon> {{ em.Verdict }}
+      </span>
+    }
+    @if (em.ThreatFamily) {
+      <span class="threat-family-badge"><mat-icon>bug_report</mat-icon> {{ em.ThreatFamily }}</span>
+    }
+    @if (em.Actor) {
+      <span class="threat-family-badge actor"><mat-icon>person_pin</mat-icon> {{ em.Actor }}</span>
+    }
+  </div>
+
+  <!-- Email envelope -->
+  <div class="section-label">Email Envelope</div>
+  <div class="detail-meta-grid">
+    <div class="dm-row">
+      <span class="dm-label">From</span>
+      <span class="dm-val">
+        {{ em.SenderFromAddress || '—' }}
+        @if (em.SenderDomain) { <span class="dm-sub">({{ em.SenderDomain }})</span> }
+      </span>
+      @if (em.SenderDomain) {
+        <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'domain',val:em.SenderDomain}"></ng-container>
+      }
+    </div>
+    <div class="dm-row">
+      <span class="dm-label">Sender IP</span>
+      <span class="dm-val mono">{{ em.SenderIPv4 || '—' }}</span>
+      @if (em.SenderIPv4) {
+        <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'ip',val:em.SenderIPv4}"></ng-container>
+      }
+    </div>
+    <div class="dm-row">
+      <span class="dm-label">To</span>
+      <span class="dm-val">{{ em.RecipientEmailAddress || '—' }}</span>
+    </div>
+    @if ((em.AllRecipients?.length ?? 0) > 1) {
+      <div class="dm-row">
+        <span class="dm-label">All recipients</span>
+        <span class="dm-val">{{ em.AllRecipients.join(', ') }}</span>
+      </div>
+    }
+    <div class="dm-row">
+      <span class="dm-label">Received</span>
+      <span class="dm-val">{{ formatDate(em.Timestamp) }}</span>
+    </div>
+    @if (em.FirstActivity && em.FirstActivity !== em.Timestamp) {
+      <div class="dm-row">
+        <span class="dm-label">First activity</span>
+        <span class="dm-val">{{ formatDate(em.FirstActivity) }}</span>
+      </div>
+    }
+    @if (em.LastActivity) {
+      <div class="dm-row">
+        <span class="dm-label">Last activity</span>
+        <span class="dm-val">{{ formatDate(em.LastActivity) }}</span>
+      </div>
+    }
+    @if (em.InternetMessageId) {
+      <div class="dm-row">
+        <span class="dm-label">Message ID</span>
+        <span class="dm-val mono small">{{ em.InternetMessageId }}</span>
+      </div>
+    }
+    @if (em.SenderSHA256) {
+      <div class="dm-row">
+        <span class="dm-label">Body SHA256</span>
+        <span class="dm-val mono small">{{ em.SenderSHA256 }}</span>
+      </div>
+    }
+  </div>
+
+  <!-- Artefact counts -->
+  <div class="artifact-counts">
+    <div class="art-chip" [class.has-data]="em.UrlCount > 0">
+      <mat-icon>link</mat-icon>
+      <span>{{ em.UrlCount }} URL{{ em.UrlCount === 1 ? '' : 's' }}</span>
+    </div>
+    <div class="art-chip" [class.has-data]="em.AttachmentCount > 0">
+      <mat-icon>attach_file</mat-icon>
+      <span>{{ em.AttachmentCount }} attachment{{ em.AttachmentCount === 1 ? '' : 's' }}</span>
+    </div>
+    <div class="art-chip" [class.has-data]="em.IpCount > 0">
+      <mat-icon>router</mat-icon>
+      <span>{{ em.IpCount }} IP{{ em.IpCount === 1 ? '' : 's' }}</span>
+    </div>
+    @if ((em.Domains?.length ?? 0) > 0) {
+      <div class="art-chip has-data">
+        <mat-icon>dns</mat-icon>
+        <span>{{ em.Domains.length }} domain{{ em.Domains.length === 1 ? '' : 's' }}</span>
+      </div>
+    }
+  </div>
+
+  <!-- Async-loaded evidence -->
+  @if (selectedEmail?.NetworkMessageId === em.NetworkMessageId && detailLoading) {
+    <div class="detail-loading"><span class="spin-dot"></span> Loading evidence…</div>
+  }
+  @if (selectedEmail?.NetworkMessageId === em.NetworkMessageId && detail && !detailLoading) {
+
+    @if (detail.urls.length > 0) {
+      <div class="section-label">URLs ({{ detail.urls.length }})</div>
+      <div class="url-list">
+        @for (u of detail.urls; track u.Url) {
+          <div class="url-row" [class.url-threat]="isUrlThreat(u)">
+            <div class="url-row-top">
+              <span class="url-domain">{{ u.UrlDomain || '—' }}</span>
+              @if (u.Verdict)    { <span class="ev-verdict" [ngClass]="verdictClass(u.Verdict)">{{ u.Verdict }}</span> }
+              @if (u.Remediation){ <span class="ev-remediation">{{ u.Remediation }}</span> }
+              @if (u.Url) {
+                <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'url',val:u.Url}"></ng-container>
+              }
+            </div>
+            <div class="url-full">{{ u.Url }}</div>
+          </div>
+        }
+      </div>
+    }
+
+    @if (detail.attachments.length > 0) {
+      <div class="section-label">Attachments ({{ detail.attachments.length }})</div>
+      <div class="att-list">
+        @for (a of detail.attachments; track (a.SHA256 || a.FileName)) {
+          <div class="att-row" [class.att-threat]="a.Verdict === 'malicious'">
+            <mat-icon class="att-icon">attach_file</mat-icon>
+            <div class="att-info">
+              <div class="att-name-row">
+                <span class="att-name">{{ a.FileName || '(unnamed)' }}</span>
+                @if (a.Verdict)    { <span class="ev-verdict" [ngClass]="verdictClass(a.Verdict)">{{ a.Verdict }}</span> }
+                @if (a.Remediation){ <span class="ev-remediation">{{ a.Remediation }}</span> }
+              </div>
+              @if (a.FilePath) { <div class="att-path">{{ a.FilePath }}</div> }
+              <div class="att-meta">
+                @if (a.FileSize) { <span>{{ a.FileSize | number }} bytes</span> }
+                @if (a.FileType) { <span>{{ a.FileType }}</span> }
+              </div>
+              @if (a.SHA256) {
+                <div class="att-hash-row">
+                  <span class="att-hash">SHA256: {{ a.SHA256 }}</span>
+                  <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'hash',val:a.SHA256}"></ng-container>
+                </div>
+              }
+              @if (a.SHA1) { <div class="att-hash">SHA1: {{ a.SHA1 }}</div> }
+              @if (a.MD5)  { <div class="att-hash">MD5: {{ a.MD5 }}</div> }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    @if (detail.ips.length > 0) {
+      <div class="section-label">IP Indicators ({{ detail.ips.length }})</div>
+      <div class="ip-list">
+        @for (ip of detail.ips; track ip.IP) {
+          <div class="ip-row">
+            <mat-icon class="ip-icon">router</mat-icon>
+            <span class="ip-addr mono">{{ ip.IP }}</span>
+            @if (ip.Country) { <span class="ip-country">{{ ip.Country }}</span> }
+            @if (ip.Verdict) { <span class="ev-verdict" [ngClass]="verdictClass(ip.Verdict)">{{ ip.Verdict }}</span> }
+            <ng-container [ngTemplateOutlet]="vtWidget" [ngTemplateOutletContext]="{type:'ip',val:ip.IP}"></ng-container>
+          </div>
+        }
+      </div>
+    }
+
+    @if (detail.users.length > 0) {
+      <div class="section-label">Affected Mailboxes ({{ detail.users.length }})</div>
+      <div class="user-list">
+        @for (u of detail.users; track u.UPN) {
+          <div class="user-row">
+            <mat-icon class="user-icon">account_circle</mat-icon>
+            <div class="user-info">
+              <div class="user-upn">{{ u.UPN || u.Account }}</div>
+              @if (u.DisplayName && u.DisplayName !== u.UPN) { <div class="user-display">{{ u.DisplayName }}</div> }
+              @if (u.Domain) { <div class="user-domain">{{ u.Domain }}</div> }
+            </div>
+            @if (u.Verdict) { <span class="ev-verdict" [ngClass]="verdictClass(u.Verdict)">{{ u.Verdict }}</span> }
+          </div>
+        }
+      </div>
+    }
+
+    @if (detail.comments.length > 0) {
+      <div class="section-label">Analyst Notes ({{ detail.comments.length }})</div>
+      <div class="comment-list">
+        @for (c of detail.comments; track c.Created) {
+          <div class="comment-row">
+            <mat-icon class="comment-icon">comment</mat-icon>
+            <div class="comment-body">
+              <div class="comment-text">{{ c.Text }}</div>
+              <div class="comment-meta">{{ c.Author || 'Unknown' }} · {{ formatDate(c.Created) }}</div>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+  } <!-- end async evidence -->
+
+  <!-- MITRE ATT&CK -->
+  @if ((em.MitreTechniques?.length ?? 0) > 0) {
+    <div class="section-label">MITRE ATT&amp;CK</div>
+    <div class="mitre-chips">
+      @for (t of em.MitreTechniques; track t.id) {
+        <div class="mitre-chip">
+          <span class="mitre-id">{{ t.id }}</span>
+          <span class="mitre-name">{{ t.technique }}</span>
+          @if ((t.tactics?.length ?? 0) > 0) { <span class="mitre-tactics">{{ t.tactics.join(', ') }}</span> }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Domain IOCs -->
+  @if ((em.Domains?.length ?? 0) > 0) {
+    <div class="section-label">Domain IOCs</div>
+    <div class="ioc-chips">
+      @for (d of em.Domains; track d) { <span class="ioc-chip domain-chip">{{ d }}</span> }
+    </div>
+  }
+
+  <!-- File hash IOCs -->
+  @if ((em.FileHashes?.length ?? 0) > 0) {
+    <div class="section-label">File Hash IOCs</div>
+    <div class="ioc-chips">
+      @for (h of em.FileHashes; track h) { <span class="ioc-chip hash-chip mono">{{ truncate(h, 64) }}</span> }
+    </div>
+  }
+
+  <!-- Remediation -->
+  <div class="section-label">
+    Remediation
+    <span class="perm-inline-badge"><mat-icon>lock</mat-icon> Requires Mail.ReadWrite.All</span>
+  </div>
+  <div class="action-row">
+    <button class="rem-btn quarantine" [disabled]="true" title="Requires Mail.ReadWrite.All">
+      <mat-icon>lock</mat-icon> Quarantine
+    </button>
+    <button class="rem-btn soft-del" [disabled]="true" title="Requires Mail.ReadWrite.All">
+      <mat-icon>delete_outline</mat-icon> Soft Delete
+    </button>
+    <button class="rem-btn hard-del" [disabled]="true" title="Requires Mail.ReadWrite.All">
+      <mat-icon>delete_forever</mat-icon> Hard Delete
+    </button>
+    <button class="rem-btn inbox" [disabled]="true" title="Requires Mail.ReadWrite.All">
+      <mat-icon>move_to_inbox</mat-icon> Move to Inbox
+    </button>
+    <button class="rem-btn junk" [disabled]="true" title="Requires Mail.ReadWrite.All">
+      <mat-icon>report</mat-icon> Move to Junk
+    </button>
+  </div>
+
+</ng-template>
+
+<!-- ── VirusTotal inline widget (shared template) ── -->
+<ng-template #vtWidget let-t="type" let-v="val">
+  @if (isVtLoading(t, v)) {
+    <span class="vt-checking">⋯</span>
+  } @else if (vtGet(t, v)) {
+    <a class="vt-score"
+       [ngClass]="vtBadgeClass(vtGet(t, v))"
+       [href]="vtGet(t, v)!.permalink"
+       target="_blank"
+       rel="noopener"
+       title="VirusTotal: {{ vtGet(t, v)!.verdict }}"
+       (click)="$event.stopPropagation()">
+      {{ vtLabel(vtGet(t, v)) }}
+    </a>
+  } @else {
+    <button class="vt-btn" title="Query VirusTotal" (click)="$event.stopPropagation(); queryVt(t, v)">VT</button>
+  }
+</ng-template>

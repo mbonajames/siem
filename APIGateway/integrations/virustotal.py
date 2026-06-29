@@ -1,6 +1,6 @@
 """
 VirusTotal API v3 — on-demand IOC lookups.
-Supports: IP addresses, domains, file hashes (MD5/SHA1/SHA256).
+Supports: IP addresses, domains, URLs, file hashes (MD5/SHA1/SHA256).
 
 Environment variables
 ---------------------
@@ -8,6 +8,7 @@ Environment variables
   VT_TIMEOUT    HTTP timeout in seconds (default: 15)
 """
 
+import base64 as _b64
 import os
 from typing import Optional
 import requests
@@ -151,6 +152,27 @@ def lookup_domain(domain: str) -> dict:
         "last_analysis_date": attrs.get("last_analysis_date"),
         "top_detections":     _top_detections(attrs.get("last_analysis_results", {})),
         "permalink":   f"https://www.virustotal.com/gui/domain/{domain}",
+    }
+
+
+def lookup_url(url: str) -> dict:
+    """Look up a URL in VirusTotal (base64url-encoded per VT API v3)."""
+    url_id = _b64.urlsafe_b64encode(url.encode("utf-8")).rstrip(b"=").decode("ascii")
+    data   = _get(f"/urls/{url_id}")["data"]
+    attrs  = data.get("attributes", {})
+    stats  = attrs.get("last_analysis_stats", {})
+    cat_list = list(dict.fromkeys((attrs.get("categories") or {}).values()))[:4]
+    return {
+        "ioc_type":    "url",
+        "ioc_value":   url,
+        "verdict":     _verdict(stats),
+        "stats":       stats,
+        "reputation":  attrs.get("reputation"),
+        "categories":  cat_list,
+        "tags":        attrs.get("tags") or [],
+        "last_analysis_date": attrs.get("last_analysis_date"),
+        "top_detections":     _top_detections(attrs.get("last_analysis_results", {})),
+        "permalink":   f"https://www.virustotal.com/gui/url/{url_id}",
     }
 
 

@@ -24,9 +24,11 @@ export class SidebarComponent {
     { path: '/dashboard',      icon: 'dashboard',          label: 'Security Overview'       },
     { path: '/alerts',         icon: 'warning_amber',       label: 'Alerts & Investigate'    },
     { path: '/devices',        icon: 'devices',             label: 'Endpoint Security'        },
-    { path: '/nessus',         icon: 'radar',               label: 'Vulnerability Management' },
-    { path: '/my-dashboards',  icon: 'dashboard_customize', label: 'Dashboard Management'            },
-    { path: '/jira',           icon: 'confirmation_number', label: 'JIRA Tickets'             },
+    { path: '/nessus',            icon: 'radar',               label: 'Vulnerability Management' },
+    { path: '/network-security',  icon: 'wifi_tethering_error', label: 'Network Security'         },
+    { path: '/email-security',    icon: 'mark_email_unread',    label: 'Email Security'           },
+    { path: '/my-dashboards',     icon: 'dashboard_customize',  label: 'Dashboard Management'     },
+    { path: '/jira',              icon: 'confirmation_number',  label: 'JIRA Tickets'             },
     
   ];
 }

@@ -1,5 +1,5 @@
 """
-Microsoft Defender for Endpoint / Microsoft 365 Defender
+Microsoft Defender for email / Microsoft 365 Defender
 Direct Graph API integration — no Wazuh involved.
 
 Auth: Azure AD OAuth2 client_credentials
@@ -49,25 +49,25 @@ _SEV_TO_LEVEL: dict[str, int] = {
 
 # Defender alert category (camelCase from API) → (siem_category, siem_event_class)
 _CATEGORY_MAP: dict[str, tuple[str, str]] = {
-    "advancedPersistenceThreat": ("Endpoint Activity",  "APT"),
-    "commandAndControl":         ("Network Activity",   "C2 Communication"),
-    "credentialAccess":          ("Authentication",     "Credential Access"),
-    "defenseEvasion":            ("Endpoint Activity",  "Defense Evasion"),
-    "discovery":                 ("Endpoint Activity",  "Discovery"),
-    "execution":                 ("Endpoint Activity",  "Execution"),
-    "exfiltration":              ("Network Activity",   "Exfiltration"),
-    "exploit":                   ("Endpoint Activity",  "Exploit"),
-    "generalMalware":            ("Endpoint Activity",  "Malware"),
-    "impact":                    ("Endpoint Activity",  "Impact"),
-    "initialAccess":             ("Endpoint Activity",  "Initial Access"),
-    "lateralMovement":           ("Network Activity",   "Lateral Movement"),
-    "maliciousActivity":         ("Endpoint Activity",  "Malicious Activity"),
+    "advancedPersistenceThreat": ("email Activity",  "APT"),
+    "commandAndControl":         ("email Activity",   "C2 Communication"),
+    "credentialAccess":          ("email Activity",     "Credential Access"),
+    "defenseEvasion":            ("email Activity",  "Defense Evasion"),
+    "discovery":                 ("email Activity",  "Discovery"),
+    "execution":                 ("email Activity",  "Execution"),
+    "exfiltration":              ("email Activity",   "Exfiltration"),
+    "exploit":                   ("email Activity",  "Exploit"),
+    "generalMalware":            ("email Activity",  "Malware"),
+    "impact":                    ("email Activity",  "Impact"),
+    "initialAccess":             ("email Activity",  "Initial Access"),
+    "lateralMovement":           ("email Activity",   "Lateral Movement"),
+    "maliciousActivity":         ("email Activity",  "Malicious Activity"),
     "phishing":                  ("Email Security",     "Phishing"),
-    "persistence":               ("Endpoint Activity",  "Persistence"),
-    "privilegeEscalation":       ("Endpoint Activity",  "Privilege Escalation"),
-    "ransomware":                ("Endpoint Activity",  "Ransomware"),
-    "suspiciousActivity":        ("Endpoint Activity",  "Suspicious Activity"),
-    "unknownFutureValue":        ("Endpoint Activity",  "Security Alert"),
+    "persistence":               ("email Activity",  "Persistence"),
+    "privilegeEscalation":       ("email Activity",  "Privilege Escalation"),
+    "ransomware":                ("email Activity",  "Ransomware"),
+    "suspiciousActivity":        ("email Activity",  "Suspicious Activity"),
+    "unknownFutureValue":        ("email Activity",  "Security Alert"),
 }
 
 # odata evidence type → friendly label (for structured evidence list)
@@ -235,6 +235,33 @@ class DefenderClient:
             if i.get("id")
         }
 
+    def list_incidents_with_alerts(self, days: int = 7, top: int = 50) -> list[dict]:
+        """
+        Pull incidents with all associated alerts expanded — for the Incidents UI tab.
+        Note: Graph hard-caps $top at 50 for incidents; $orderby cannot be used with $filter.
+        Evidence is returned automatically inside each expanded alert.
+        """
+        since = (datetime.now(tz=timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return self._get_paged(
+            "/security/incidents",
+            params={
+                "$filter": f"lastUpdateDateTime ge {since}",
+                "$expand": "alerts",
+                "$top":    min(top, 50),
+            },
+        )
+
+    def get_incident_detail(self, incident_id: str) -> dict:
+        """
+        Fetch a single incident with all associated alerts (evidence inline).
+        Uses GET /security/incidents/{id}?$expand=alerts
+        Evidence is returned automatically inside each alert — no nested $expand needed.
+        """
+        return self._get(
+            f"/security/incidents/{incident_id}",
+            params={"$expand": "alerts"},
+        )
+
     def run_hunting_query(self, kql: str, timeout_secs: int = 30) -> dict:
         """
         Execute an Advanced Hunting KQL query.
@@ -396,10 +423,16 @@ def _extract_evidence(raw_evidence: list[dict]) -> tuple[list[dict], dict]:
 
         elif etype == "email":
             p1 = ev.get("p1Sender") or {}
+            p2 = ev.get("p2Sender") or {}
+            # p1 = envelope/Return-Path sender; p2 = From header — use p2 as fallback
+            sender_email  = p1.get("emailAddress")  or p2.get("emailAddress")
+            sender_domain = p1.get("domainName")    or p2.get("domainName")
+            sender_name   = p1.get("displayName")   or p2.get("displayName")
             item = {**base,
                 "subject":        ev.get("subject"),
-                "sender":         p1.get("emailAddress"),
-                "sender_domain":  p1.get("domainName"),
+                "sender":         sender_email,
+                "sender_display": sender_name,
+                "sender_domain":  sender_domain,
                 "recipient":      ev.get("recipientEmailAddress"),
                 "delivery":       ev.get("deliveryAction"),
                 "sender_ip":      ev.get("senderIp"),

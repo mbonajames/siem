@@ -133,26 +133,26 @@ class Normalizer:
         if data.get("integration") == "ms-defender":
             cat = (data.get("defender", {}).get("category") or "").strip()
             _MAP = {
-                "advancedPersistenceThreat": ("Endpoint Activity",  "APT"),
-                "commandAndControl":         ("Network Activity",   "C2 Communication"),
-                "credentialAccess":          ("Authentication",     "Credential Access"),
-                "defenseEvasion":            ("Endpoint Activity",  "Defense Evasion"),
-                "discovery":                 ("Endpoint Activity",  "Discovery"),
-                "execution":                 ("Endpoint Activity",  "Execution"),
-                "exfiltration":              ("Network Activity",   "Exfiltration"),
-                "exploit":                   ("Endpoint Activity",  "Exploit"),
-                "generalMalware":            ("Endpoint Activity",  "Malware"),
-                "impact":                    ("Endpoint Activity",  "Impact"),
-                "initialAccess":             ("Endpoint Activity",  "Initial Access"),
-                "lateralMovement":           ("Network Activity",   "Lateral Movement"),
-                "maliciousActivity":         ("Endpoint Activity",  "Malicious Activity"),
+                "advancedPersistenceThreat": ("Email Activity",  "APT"),
+                "commandAndControl":         ("Email Activity",   "C2 Communication"),
+                "credentialAccess":          ("Email Activity",     "Credential Access"),
+                "defenseEvasion":            ("Email Activity",  "Defense Evasion"),
+                "discovery":                 ("Email Activity",  "Discovery"),
+                "execution":                 ("Email Activity",  "Execution"),
+                "exfiltration":              ("Email Activity",   "Exfiltration"),
+                "exploit":                   ("Email Activity",  "Exploit"),
+                "generalMalware":            ("Email Activity",  "Malware"),
+                "impact":                    ("Email Activity",  "Impact"),
+                "initialAccess":             ("Email Activity",  "Initial Access"),
+                "lateralMovement":           ("Email Activity",   "Lateral Movement"),
+                "maliciousActivity":         ("Email Activity",  "Malicious Activity"),
                 "phishing":                  ("Email Security",     "Phishing"),
-                "persistence":               ("Endpoint Activity",  "Persistence"),
-                "privilegeEscalation":       ("Endpoint Activity",  "Privilege Escalation"),
-                "ransomware":                ("Endpoint Activity",  "Ransomware"),
-                "suspiciousActivity":        ("Endpoint Activity",  "Suspicious Activity"),
+                "persistence":               ("Email Activity",  "Persistence"),
+                "privilegeEscalation":       ("Email Activity",  "Privilege Escalation"),
+                "ransomware":                ("Email Activity",  "Ransomware"),
+                "suspiciousActivity":        ("Email Activity",  "Suspicious Activity"),
             }
-            return _MAP.get(cat, ("Endpoint Activity", "Security Alert"))
+            return _MAP.get(cat, ("Email Activity", "Security Alert"))
 
         if "ms-graph" in groups or data.get("integration") == "ms-graph":
             ms = data.get("ms-graph", {})

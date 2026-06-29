@@ -1,10 +1,14 @@
 import asyncio
 import logging
 import time
-from fastapi import FastAPI, Query, HTTPException, Request, Depends
+from fastapi import FastAPI, Query, HTTPException, Request, Depends, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Any
+import vuln_parser
+import vuln_store
+import vuln_report_xlsx
+import vuln_report_pdf
 from opensearchpy.exceptions import ConnectionError as OSConnectionError, TransportError
 from client import (
     indexer_client, SophosCentralClient, SophosAPIError,
@@ -20,7 +24,7 @@ from auth import get_current_user, require_role
 import custom_dashboards as cd
 
 from investigation_querry import build_investigation_query
-from integrations.virustotal import lookup_ip, lookup_domain, lookup_hash, VirusTotalError
+from integrations.virustotal import lookup_ip, lookup_domain, lookup_hash, lookup_url, VirusTotalError
 from integrations.sophos import (
     list_devices,
     get_device,
@@ -34,6 +38,8 @@ from integrations.ms_defender import (
     ensure_index_template as defender_ensure_template,
     delete_stale_indices as defender_delete_stale,
     DEFENDER_POLL_SECS,
+    _extract_evidence as defender_extract_evidence,
+    _mitre_techniques as defender_mitre_techniques,
 )
 
 log = logging.getLogger(__name__)
@@ -1141,6 +1147,15 @@ def vt_lookup_hash(hash_value: str, _user: dict = Depends(get_current_user)):
         raise _vt_error(e)
 
 
+@app.get("/vt/url/")
+def vt_lookup_url(url: str = Query(...), _user: dict = Depends(get_current_user)):
+    """Query VirusTotal for a URL reputation (passed as ?url=... query param)."""
+    try:
+        return lookup_url(url)
+    except Exception as e:
+        raise _vt_error(e)
+
+
 # ── Custom dashboards ─────────────────────────────────────────────────────────
 
 def _owner(user: dict, request: Request = None) -> str:
@@ -1200,6 +1215,175 @@ def defender_status(_user: dict = Depends(get_current_user)):
         "last_error":         _defender_last_error,
         "poll_interval_secs": DEFENDER_POLL_SECS,
     }
+
+
+@app.get("/incident/{incident_id}/")
+def get_incident_detail(incident_id: str, _user: dict = Depends(get_current_user)):
+    """
+    Fetch a Defender incident with all associated alerts live from Graph API.
+    Returns incident metadata + normalized alert list (evidence counts, MITRE, etc.).
+    """
+    if not defender_client.configured:
+        raise HTTPException(503, "Defender client not configured (DEFENDER_CLIENT_ID / DEFENDER_CLIENT_SECRET missing)")
+    try:
+        raw = defender_client.get_incident_detail(incident_id)
+    except DefenderClientError as e:
+        raise HTTPException(e.status_code, e.detail)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+    # Map each expanded alert to a normalised shape
+    alerts_out = []
+    for a in (raw.get("alerts") or []):
+        evidence = a.get("evidence") or []
+        ev_counts: dict[str, int] = {}
+        for ev in evidence:
+            raw_type = ev.get("@odata.type", "") or ""
+            # e.g. "#microsoft.graph.security.mailMessageEvidence" → "mailMessageEvidence"
+            short = raw_type.split(".")[-1] if "." in raw_type else raw_type
+            label = {
+                "mailMessageEvidence": "email",
+                "mailboxEvidence":     "mailbox",
+                "urlEvidence":         "url",
+                "fileEvidence":        "file",
+                "ipEvidence":          "ip",
+                "userEvidence":        "user",
+                "deviceEvidence":      "device",
+                "mailClusterEvidence": "email_cluster",
+                "processEvidence":     "process",
+            }.get(short, short or "other")
+            ev_counts[label] = ev_counts.get(label, 0) + 1
+
+        mitre_raw = a.get("mitreTechniques") or []
+        mitre_out = []
+        for t in mitre_raw:
+            if isinstance(t, str):
+                mitre_out.append({"id": t, "technique": t, "tactics": []})
+            elif isinstance(t, dict):
+                mitre_out.append({
+                    "id":        t.get("techniqueID") or t.get("id", ""),
+                    "technique": t.get("technique")  or t.get("id", ""),
+                    "tactics":   [tt.get("name", "") for tt in (t.get("tactics") or [])],
+                })
+
+        alerts_out.append({
+            "AlertId":         a.get("id", ""),
+            "AlertTitle":      a.get("title", "") or a.get("displayName", ""),
+            "Description":     a.get("description", ""),
+            "Severity":        (a.get("severity") or "unknown").capitalize(),
+            "Status":          a.get("status", ""),
+            "Category":        a.get("category", ""),
+            "Classification":  a.get("classification", ""),
+            "Determination":   a.get("determination", ""),
+            "ServiceSource":   a.get("serviceSource", ""),
+            "DetectionSource": a.get("detectionSource", ""),
+            "ThreatFamily":    a.get("threatFamilyName") or a.get("threatDisplayName", ""),
+            "Actor":           a.get("actorDisplayName", ""),
+            "AlertUrl":        a.get("alertWebUrl", ""),
+            "CreatedAt":       a.get("createdDateTime", ""),
+            "LastActivity":    a.get("lastActivityDateTime", ""),
+            "AssignedTo":      a.get("assignedTo", ""),
+            "EvidenceCounts":  ev_counts,
+            "MitreTechniques": mitre_out,
+        })
+
+    tags_raw = raw.get("tags") or []
+    tags = [t.get("id", str(t)) if isinstance(t, dict) else str(t) for t in tags_raw]
+
+    return {
+        "IncidentId":     str(raw.get("id", "")),
+        "Title":          raw.get("displayName", ""),
+        "Severity":       (raw.get("severity") or "unknown").capitalize(),
+        "Status":         raw.get("status", ""),
+        "Classification": raw.get("classification", ""),
+        "Determination":  raw.get("determination", ""),
+        "AssignedTo":     raw.get("assignedTo", ""),
+        "Tags":           tags,
+        "IncidentUrl":    raw.get("incidentWebUrl", ""),
+        "CreatedAt":      raw.get("createdDateTime", ""),
+        "LastUpdated":    raw.get("lastUpdateDateTime", ""),
+        "AlertCount":     len(alerts_out),
+        "Alerts":         alerts_out,
+    }
+
+
+def _norm_incident_alert(a: dict) -> dict:
+    """Normalise a single alert from $expand=alerts for the Incidents UI tab."""
+    evidence, _ = defender_extract_evidence(a.get("evidence") or [])
+    mitre_raw   = a.get("mitreTechniques") or []
+    mitre: list[dict] = []
+    for t in mitre_raw:
+        if isinstance(t, str):
+            mitre.append({"id": t, "technique": t, "tactics": []})
+        elif isinstance(t, dict):
+            mitre.append({
+                "id":        t.get("techniqueID") or t.get("id", ""),
+                "technique": t.get("technique")  or t.get("id", ""),
+                "tactics":   [tt.get("name", "") if isinstance(tt, dict) else str(tt)
+                              for tt in (t.get("tactics") or [])],
+            })
+    return {
+        "id":            a.get("id", ""),
+        "title":         a.get("title", "") or a.get("displayName", ""),
+        "description":   a.get("description", ""),
+        "severity":      (a.get("severity") or "unknown").lower(),
+        "status":        a.get("status", ""),
+        "category":      a.get("category", ""),
+        "classification":a.get("classification", ""),
+        "determination": a.get("determination", ""),
+        "serviceSource": a.get("serviceSource", ""),
+        "detectionSource":a.get("detectionSource", ""),
+        "threatFamily":  a.get("threatFamilyName") or a.get("threatDisplayName", ""),
+        "actor":         a.get("actorDisplayName", ""),
+        "assignedTo":    a.get("assignedTo", ""),
+        "alertUrl":      a.get("alertWebUrl", ""),
+        "createdAt":     a.get("createdDateTime", ""),
+        "lastActivity":  a.get("lastActivityDateTime", ""),
+        "evidence":      evidence,
+        "mitreTechniques": mitre,
+    }
+
+
+@app.get("/incidents/")
+def list_incidents(
+    days:  int  = Query(7, ge=1, le=90),
+    _user: dict = Depends(get_current_user),
+):
+    """
+    Fetch all Defender incidents (with expanded alerts) directly from Graph API.
+    Sorted newest-updated first.
+    """
+    if not defender_client.configured:
+        raise HTTPException(503, "Defender client not configured")
+    try:
+        items = defender_client.list_incidents_with_alerts(days=days)
+    except DefenderClientError as e:
+        raise HTTPException(e.status_code, e.detail)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+    incidents = []
+    for inc in items:
+        tags_raw = inc.get("tags") or []
+        tags = [t.get("id", str(t)) if isinstance(t, dict) else str(t) for t in tags_raw]
+        alerts = [_norm_incident_alert(a) for a in (inc.get("alerts") or [])]
+        incidents.append({
+            "id":             str(inc.get("id", "")),
+            "title":          inc.get("displayName", ""),
+            "severity":       (inc.get("severity") or "unknown").lower(),
+            "status":         inc.get("status", ""),
+            "classification": inc.get("classification", ""),
+            "determination":  inc.get("determination", ""),
+            "assignedTo":     inc.get("assignedTo", ""),
+            "tags":           tags,
+            "incidentUrl":    inc.get("incidentWebUrl", ""),
+            "createdAt":      inc.get("createdDateTime", ""),
+            "lastUpdated":    inc.get("lastUpdateDateTime", ""),
+            "alerts":         alerts,
+        })
+
+    incidents.sort(key=lambda x: x.get("lastUpdated", ""), reverse=True)
+    return {"incidents": incidents, "total": len(incidents)}
 
 
 @app.get("/defender/alerts")
@@ -1557,3 +1741,700 @@ def share_dashboard(
     if dash.get("owner") != _owner(user, request):
         raise HTTPException(status_code=403, detail="Only the owner can change sharing")
     return cd.toggle_share(indexer_client, dashboard_id, req.shared)
+
+
+# ── Darktrace endpoints ───────────────────────────────────────────────────────
+
+@app.get("/darktrace/alerts/")
+def darktrace_alerts(
+    limit: int           = Query(50,  ge=1, le=200),
+    hours: Optional[int] = Query(24,  description="Time window in hours"),
+    _user: dict          = Depends(get_current_user),
+):
+    """Return Darktrace alerts from OpenSearch (ingested via Wazuh)."""
+    query = build_alert_query(limit, 0, "darktrace", None, hours, None)
+    result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    total  = result["hits"]["total"]["value"] if isinstance(result["hits"]["total"], dict) else result["hits"]["total"]
+    return {
+        "total":  total,
+        "events": [normalizer.normalize(hit) for hit in result["hits"]["hits"]],
+    }
+
+
+@app.get("/darktrace/summary-statistics/")
+def darktrace_summary_statistics(_user: dict = Depends(get_current_user)):
+    """Aggregate Darktrace alert counts from OpenSearch by severity."""
+    query = {
+        "size": 0,
+        "query": {"bool": {"filter": [{"term": {"rule.groups": "darktrace"}}]}},
+        "aggs": {
+            "by_severity": {
+                "range": {
+                    "field": "rule.level",
+                    "ranges": [
+                        {"key": "Critical", "from": 15},
+                        {"key": "High",     "from": 12, "to": 15},
+                        {"key": "Medium",   "from": 7,  "to": 12},
+                        {"key": "Low",                  "to": 7},
+                    ],
+                }
+            },
+            "unique_hosts": {"cardinality": {"field": "agent.name"}},
+        },
+    }
+    try:
+        result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    total   = result["hits"]["total"]["value"] if isinstance(result["hits"]["total"], dict) else result["hits"]["total"]
+    aggs    = result.get("aggregations", {})
+    buckets = aggs.get("by_severity", {}).get("buckets", [])
+    by_sev  = {b["key"]: b["doc_count"] for b in buckets}
+
+    return {
+        "total":         total,
+        "modelBreaches": total,
+        "devices":       aggs.get("unique_hosts", {}).get("value"),
+        "by_severity":   by_sev,
+    }
+
+
+@app.get("/darktrace/devices/")
+def darktrace_devices(
+    count: int  = Query(100, ge=1, le=500),
+    _user: dict = Depends(get_current_user),
+):
+    """Return unique hosts seen in Darktrace alerts from OpenSearch."""
+    query = {
+        "size": 0,
+        "query": {"bool": {"filter": [{"term": {"rule.groups": "darktrace"}}]}},
+        "aggs": {
+            "hosts": {
+                "terms": {"field": "agent.name", "size": count},
+            }
+        },
+    }
+    try:
+        result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    buckets = result.get("aggregations", {}).get("hosts", {}).get("buckets", [])
+    return {
+        "devices": [{"hostname": b["key"], "alert_count": b["doc_count"]} for b in buckets],
+        "total":   len(buckets),
+    }
+
+
+# ── Email Security (Defender alerts from OpenSearch) ──────────────────────────
+#
+# SecurityAlert.Read.All is enough — the Defender poller already ingests all
+# alerts into siem-defender-* via /security/alerts_v2.  We query OpenSearch
+# directly instead of calling Advanced Hunting (ThreatHunting.Read.All).
+#
+# Advanced Hunting (/email/hunt/) and remediation (/email/action/) still need
+# additional permissions and will return a 403 explanation from the client.
+
+# Map Defender API category strings → friendly ThreatTypes labels
+_DEF_CAT_TO_THREAT: dict[str, str] = {
+    "phishing":                "Phish",
+    "generalMalware":          "Malware",
+    "ransomware":              "Malware",
+    "maliciousActivity":       "Malware",
+    "businessEmailCompromise": "BusinessEmailCompromise",
+    "spam":                    "Spam",
+    "suspiciousActivity":      "Suspicious",
+    "credentialAccess":        "CredentialAccess",
+    "initialAccess":           "InitialAccess",
+    "advancedPersistenceThreat": "APT",
+    "commandAndControl":       "C2",
+    "defenseEvasion":          "DefenseEvasion",
+    "execution":               "Execution",
+    "exfiltration":            "Exfiltration",
+    "impact":                  "Impact",
+    "lateralMovement":         "LateralMovement",
+    "persistence":             "Persistence",
+    "privilegeEscalation":     "PrivilegeEscalation",
+}
+
+# Delivery/status mapping from Defender alert status
+_DEF_STATUS_TO_DELIVERY: dict[str, str] = {
+    "resolved":   "Resolved",
+    "inProgress": "In Progress",
+    "new":        "New",
+    "unknown":    "",
+}
+
+
+def _hit_to_email_record(hit: dict) -> dict:
+    """Convert a siem-defender-* OpenSearch hit to a rich EmailRecord dict."""
+    src      = hit.get("_source", {})
+    defender = src.get("data", {}).get("defender", {})
+    evidence = defender.get("evidence") or []
+
+    email_ev  = next((e for e in evidence if e.get("type") == "email"),    {})
+    mb_ev     = next((e for e in evidence if e.get("type") == "mailbox"),  {})
+    url_evs   = [e for e in evidence if e.get("type") == "url"]
+    file_evs  = [e for e in evidence if e.get("type") == "file"]
+    ip_evs    = [e for e in evidence if e.get("type") == "ip"]
+
+    category    = defender.get("category", "")
+    threat_type = _DEF_CAT_TO_THREAT.get(category, category)
+    delivery    = email_ev.get("delivery") or _DEF_STATUS_TO_DELIVERY.get(defender.get("status", ""), "")
+
+    # Sender: email evidence → flat entity remote_ip fallback for IP
+    sender      = email_ev.get("sender", "")
+    sender_dom  = email_ev.get("sender_domain", "")
+    sender_ip   = email_ev.get("sender_ip") or defender.get("remote_ip", "")
+    # Recipient: email evidence → mailbox evidence → flat entity user_upn
+    recipient   = (
+        email_ev.get("recipient") or
+        mb_ev.get("upn") or
+        defender.get("user_upn", "")
+    )
+    # Sender domain fallback: first domain from flat entity list
+    if not sender_dom:
+        flat_domains = defender.get("domains") or []
+        if flat_domains:
+            sender_dom = flat_domains[0]
+
+    # Collect all affected recipients from email + mailbox evidence items
+    all_recipients = list({
+        e.get("recipient") or e.get("upn", "")
+        for e in evidence if e.get("type") in ("email", "mailbox")
+        if e.get("recipient") or e.get("upn")
+    })
+
+    return {
+        # ── Identifiers ──────────────────────────────────────────────────
+        "Timestamp":             src.get("@timestamp", ""),
+        "NetworkMessageId":      defender.get("alert_id", hit.get("_id", "")),
+        "InternetMessageId":     email_ev.get("message_id", ""),
+        # ── Sender ───────────────────────────────────────────────────────
+        "SenderFromAddress":     sender,
+        "SenderDisplayName":     email_ev.get("sender_display", "") or sender,
+        "SenderDomain":          sender_dom,
+        "SenderIPv4":            sender_ip,
+        "SenderSHA256":          email_ev.get("sha256", ""),
+        # ── Recipient ────────────────────────────────────────────────────
+        "RecipientEmailAddress": recipient,
+        "AllRecipients":         all_recipients,
+        # ── Email body ───────────────────────────────────────────────────
+        "Subject":               email_ev.get("subject") or defender.get("title", ""),
+        "DeliveryAction":        delivery,
+        "DeliveryLocation":      "",
+        # ── Threat ───────────────────────────────────────────────────────
+        "ThreatTypes":           threat_type,
+        "Verdict":               email_ev.get("verdict", ""),
+        "UrlCount":              len(url_evs),
+        "AttachmentCount":       len(file_evs),
+        "IpCount":               len(ip_evs),
+        # ── Alert metadata ───────────────────────────────────────────────
+        "Severity":              defender.get("severity", ""),
+        "Status":                defender.get("status", ""),
+        "AlertTitle":            defender.get("title", ""),
+        "AlertDescription":      defender.get("description", ""),
+        "Category":              category,
+        "Classification":        defender.get("classification", ""),
+        "Determination":         defender.get("determination", ""),
+        "DetectionSource":       defender.get("detection_source", ""),
+        "ServiceSource":         defender.get("service_source", ""),
+        "ThreatFamily":          defender.get("threat_family", ""),
+        "Actor":                 defender.get("actor", ""),
+        "AlertUrl":              defender.get("alert_url", ""),
+        "IncidentId":            defender.get("incident_id", ""),
+        "IncidentUrl":           defender.get("incident_url", ""),
+        # Incident sub-doc (stored by poller when incident enrichment is available)
+        "IncidentTitle":         (defender.get("incident") or {}).get("title", ""),
+        "IncidentSeverity":      (defender.get("incident") or {}).get("severity", ""),
+        "IncidentStatus":        (defender.get("incident") or {}).get("status", ""),
+        "IncidentClassification":(defender.get("incident") or {}).get("classification", ""),
+        "IncidentDetermination": (defender.get("incident") or {}).get("determination", ""),
+        "IncidentAssignedTo":    (defender.get("incident") or {}).get("assigned_to", ""),
+        "IncidentTags":          (defender.get("incident") or {}).get("tags", []),
+        "FirstActivity":         defender.get("first_activity", ""),
+        "LastActivity":          defender.get("last_activity", ""),
+        "ResolvedAt":            defender.get("resolved", ""),
+        "MitreTechniques":       defender.get("mitreTechniques") or [],
+        # ── Domains / flat entities ──────────────────────────────────────
+        "Domains":               defender.get("domains") or [],
+        "FileHashes":            defender.get("file_hashes") or [],
+        # ── Compat ───────────────────────────────────────────────────────
+        "AuthenticationDetails": "{}",
+        "OrgLevelPolicy":        "",
+        "OrgLevelAction":        "",
+    }
+
+
+def _email_os_filters(days: int, threat_type: Optional[str] = None,
+                      q: Optional[str] = None) -> list[dict]:
+    """Build OpenSearch filter clauses for email security alerts."""
+    clauses: list[dict] = [
+        {"term": {"data.integration": "ms-defender"}},
+        # Email-related: Defender for Office 365 OR phishing/BEC/malware categories
+        {"bool": {
+            "should": [
+                {"term": {"data.defender.service_source": "microsoftDefenderForOffice365"}},
+                {"terms": {"data.defender.category": list(_DEF_CAT_TO_THREAT.keys())}},
+            ],
+            "minimum_should_match": 1,
+        }},
+        {"range": {"@timestamp": {"gte": f"now-{days}d/d"}}},
+    ]
+    if threat_type:
+        # Map incoming friendly name back to one or more category keys
+        target = threat_type.lower()
+        matched = [k for k, v in _DEF_CAT_TO_THREAT.items() if target in v.lower() or target in k.lower()]
+        if matched:
+            clauses.append({"terms": {"data.defender.category": matched}})
+    if q:
+        clauses.append({"multi_match": {
+            "query": q,
+            "fields": ["rule.description", "data.defender.title", "data.defender.description"],
+            "type":   "phrase_prefix",
+        }})
+    return clauses
+
+
+@app.get("/email/search/")
+def email_search(
+    days:            int           = Query(7,   ge=1, le=30),
+    sender:          Optional[str] = Query(None),
+    recipient:       Optional[str] = Query(None),
+    subject:         Optional[str] = Query(None),
+    threat_type:     Optional[str] = Query(None),
+    delivery_action: Optional[str] = Query(None),
+    _user:           dict          = Depends(get_current_user),
+):
+    """Return email security alerts from OpenSearch (ingested by the Defender poller)."""
+    # Free-text search across sender/recipient/subject — all map to rule.description/title
+    q = " ".join(filter(None, [sender, recipient, subject])) or None
+
+    filters = _email_os_filters(days, threat_type, q)
+    query = {
+        "size": 200,
+        "query":  {"bool": {"filter": filters}},
+        "sort":   [{"@timestamp": "desc"}],
+    }
+    try:
+        result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    hits    = result["hits"]["hits"]
+    records = [_hit_to_email_record(h) for h in hits]
+    return {"results": records, "total": len(records)}
+
+
+@app.get("/email/stats/")
+def email_stats(
+    days:  int  = Query(7, ge=1, le=30),
+    _user: dict = Depends(get_current_user),
+):
+    """Aggregate email alert counts by category from OpenSearch."""
+    filters = _email_os_filters(days)
+    query = {
+        "size": 0,
+        "query": {"bool": {"filter": filters}},
+        "aggs": {
+            "total":      {"value_count": {"field": "_id"}},
+            "by_category": {"terms": {"field": "data.defender.category", "size": 30}},
+            "by_severity": {"terms": {"field": "data.defender.severity",  "size": 10}},
+        },
+    }
+    try:
+        result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    total      = result["hits"]["total"]["value"] if isinstance(result["hits"]["total"], dict) else result["hits"]["total"]
+    cat_buckets = {b["key"]: b["doc_count"] for b in result.get("aggregations", {}).get("by_category", {}).get("buckets", [])}
+
+    phishing = cat_buckets.get("phishing", 0)
+    malware  = cat_buckets.get("generalMalware", 0) + cat_buckets.get("ransomware", 0) + cat_buckets.get("maliciousActivity", 0)
+    spam     = cat_buckets.get("spam", 0)
+    bec      = cat_buckets.get("businessEmailCompromise", 0)
+
+    return {
+        "Total":       total,
+        "Phishing":    phishing,
+        "Malware":     malware,
+        "Spam":        spam,
+        "BEC":         bec,
+        "Blocked":     0,
+        "Delivered":   0,
+        "Quarantined": 0,
+    }
+
+
+@app.get("/email/{network_message_id}/detail/")
+def email_detail(
+    network_message_id: str,
+    _user: dict = Depends(get_current_user),
+):
+    """
+    Return evidence details for a Defender alert stored in OpenSearch.
+    network_message_id is actually the Defender alert_id for OpenSearch-backed alerts.
+    """
+    safe_id = network_message_id.replace('"', '').replace("'", "")
+    query = {
+        "size": 1,
+        "query": {"bool": {"filter": [
+            {"term": {"data.integration": "ms-defender"}},
+            {"term": {"data.defender.alert_id": safe_id}},
+        ]}},
+    }
+    try:
+        result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    hits = result["hits"]["hits"]
+    if not hits:
+        return {"urls": [], "attachments": [], "ips": [], "users": [], "comments": [], "post_delivery": []}
+
+    src      = hits[0].get("_source", {})
+    defender = src.get("data", {}).get("defender", {})
+    evidence = defender.get("evidence") or []
+
+    # URLs — include verdict and remediation status
+    urls = [
+        {
+            "Url":         e.get("url", ""),
+            "UrlDomain":   "",
+            "UrlLocation": "",
+            "ThreatTypes": "",
+            "Verdict":     e.get("verdict", ""),
+            "Remediation": e.get("remediation", ""),
+        }
+        for e in evidence if e.get("type") == "url"
+    ]
+    # Enrich domain from url if blank
+    try:
+        from urllib.parse import urlparse
+        for u in urls:
+            if not u["UrlDomain"] and u["Url"]:
+                u["UrlDomain"] = urlparse(u["Url"]).hostname or ""
+    except Exception:
+        pass
+
+    # Attachments — all hashes
+    attachments = [
+        {
+            "FileName":    e.get("name", ""),
+            "FilePath":    e.get("path", ""),
+            "FileSize":    e.get("size") or 0,
+            "FileType":    "",
+            "SHA256":      e.get("sha256", ""),
+            "SHA1":        e.get("sha1", ""),
+            "MD5":         e.get("md5", ""),
+            "ThreatTypes": "",
+            "Verdict":     e.get("verdict", ""),
+            "Remediation": e.get("remediation", ""),
+        }
+        for e in evidence if e.get("type") == "file"
+    ]
+
+    # IP indicators
+    ips = [
+        {
+            "IP":          e.get("ip", ""),
+            "Country":     e.get("country", ""),
+            "Verdict":     e.get("verdict", ""),
+            "Remediation": e.get("remediation", ""),
+        }
+        for e in evidence if e.get("type") == "ip"
+    ]
+
+    # Affected users / mailboxes
+    users = [
+        {
+            "UPN":         e.get("upn", "") or e.get("account", ""),
+            "Account":     e.get("account", ""),
+            "Domain":      e.get("domain", ""),
+            "DisplayName": e.get("display_name", ""),
+            "AadId":       e.get("aad_id", ""),
+            "Verdict":     e.get("verdict", ""),
+            "Type":        e.get("type", ""),
+        }
+        for e in evidence if e.get("type") in ("mailbox", "user")
+    ]
+
+    # Analyst comments (from Defender alert comments)
+    comments = [
+        {
+            "Text":    c.get("text", ""),
+            "Author":  c.get("author", ""),
+            "Created": c.get("created", ""),
+        }
+        for c in (defender.get("comments") or [])
+        if c.get("text")
+    ]
+
+    # Email cluster evidence (pass raw useful fields)
+    email_clusters = [
+        e.get("raw", {})
+        for e in evidence if e.get("type") == "email_cluster"
+    ]
+
+    # post_delivery kept for template compat
+    post_delivery = [
+        {
+            "Timestamp":        c.get("created", ""),
+            "ActionType":       "AnalystComment",
+            "ActionTrigger":    c.get("author", ""),
+            "ActionResult":     c.get("text", ""),
+            "DeliveryLocation": "",
+        }
+        for c in (defender.get("comments") or [])
+    ]
+
+    return {
+        "urls":           urls,
+        "attachments":    attachments,
+        "ips":            ips,
+        "users":          users,
+        "comments":       comments,
+        "email_clusters": email_clusters,
+        "post_delivery":  post_delivery,
+    }
+
+
+@app.post("/email/hunt/")
+def email_hunt(
+    body:  dict,
+    _user: dict = Depends(get_current_user),
+):
+    """Run a free-form KQL query against the Microsoft Threat Hunting tables."""
+    if not defender_client.configured:
+        _email_not_configured()
+    kql = (body.get("query") or "").strip()
+    if not kql:
+        raise HTTPException(status_code=422, detail="query is required")
+    try:
+        raw = defender_client.run_hunting_query(kql, timeout_secs=min(int(body.get("timeout_secs", 30)), 90))
+        return {
+            "schema":  raw.get("schema", []),
+            "results": raw.get("results", []),
+        }
+    except DefenderClientError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.post("/email/action/")
+def email_action(
+    body:  dict,
+    _user: dict = Depends(get_current_user),
+):
+    """
+    Take a remediation action on an email via Microsoft Graph.
+
+    Body: {user_id, internet_message_id, action}
+    action: quarantine | soft_delete | hard_delete | move_inbox | move_junk
+
+    Requires Mail.ReadWrite (or Mail.ReadWrite.All) on the service principal.
+    """
+    if not defender_client.configured:
+        _email_not_configured()
+
+    user_id  = (body.get("user_id") or "").strip()
+    msg_id   = (body.get("internet_message_id") or "").strip()
+    action   = (body.get("action") or "").strip()
+
+    if not user_id or not msg_id or not action:
+        raise HTTPException(status_code=422, detail="user_id, internet_message_id, and action are required")
+
+    # Folder IDs for well-known folders
+    _FOLDER_MAP = {
+        "move_inbox": "inbox",
+        "move_junk":  "junkemail",
+        "quarantine": "quarantine",
+    }
+
+    try:
+        defender_client._ensure_token()
+        headers = defender_client._headers()
+        import urllib.parse as _up
+
+        # Locate the message by internet message ID
+        filter_q = f"internetMessageId eq '{_up.quote(msg_id)}'"
+        search_url = f"https://graph.microsoft.com/v1.0/users/{_up.quote(user_id)}/messages"
+        import requests as _req
+        r = _req.get(search_url, headers=headers,
+                     params={"$filter": filter_q, "$select": "id", "$top": "1"},
+                     timeout=30)
+        if not r.ok:
+            raise HTTPException(status_code=r.status_code,
+                                detail=f"Graph mailbox lookup failed: {r.text[:300]}")
+        msgs = r.json().get("value", [])
+        if not msgs:
+            raise HTTPException(status_code=404, detail="Message not found in mailbox")
+
+        graph_msg_id = msgs[0]["id"]
+        base_url = f"https://graph.microsoft.com/v1.0/users/{_up.quote(user_id)}/messages/{_up.quote(graph_msg_id)}"
+
+        if action == "soft_delete":
+            r2 = _req.delete(base_url, headers=headers, timeout=30)
+        elif action == "hard_delete":
+            # Move to deleted items first, then permanently delete
+            r2 = _req.post(f"{base_url}/move", headers=headers,
+                           json={"destinationId": "deleteditems"}, timeout=30)
+            if r2.ok:
+                deleted_id = r2.json().get("id", graph_msg_id)
+                del_url = f"https://graph.microsoft.com/v1.0/users/{_up.quote(user_id)}/messages/{_up.quote(deleted_id)}"
+                r2 = _req.delete(del_url, headers=headers, timeout=30)
+        elif action in _FOLDER_MAP:
+            r2 = _req.post(f"{base_url}/move", headers=headers,
+                           json={"destinationId": _FOLDER_MAP[action]}, timeout=30)
+        else:
+            raise HTTPException(status_code=422, detail=f"Unknown action: {action}")
+
+        if not r2.ok:
+            raise HTTPException(status_code=r2.status_code,
+                                detail=f"Graph action failed: {r2.text[:300]}")
+
+        return {"success": True, "action": action, "user_id": user_id}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ── Vulnerability Management ──────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def _init_vuln_index():
+    try:
+        vuln_store.ensure_index(indexer_client)
+    except Exception:
+        pass
+
+
+@app.post("/vuln/upload", status_code=201)
+async def vuln_upload(
+    mfi:       str        = Query(..., description="MFI name"),
+    quarter:   str        = Query(..., description="Q1 | Q2 | Q3 | Q4"),
+    year:      int        = Query(..., description="Assessment year, e.g. 2025"),
+    scan_type: str        = Query("internal", description="internal | external"),
+    file:      UploadFile = File(...),
+    _user:     dict       = Depends(get_current_user),
+):
+    if quarter not in ("Q1", "Q2", "Q3", "Q4"):
+        raise HTTPException(status_code=400, detail="quarter must be Q1, Q2, Q3 or Q4")
+    if scan_type not in ("internal", "external"):
+        raise HTTPException(status_code=400, detail="scan_type must be internal or external")
+
+    fname = file.filename or ""
+    if not (fname.lower().endswith(".nessus") or fname.lower().endswith(".csv")):
+        raise HTTPException(status_code=400, detail="Only .nessus or .csv files are accepted")
+
+    content = await file.read()
+    loop    = asyncio.get_running_loop()
+
+    try:
+        scan = await loop.run_in_executor(
+            None, vuln_parser.parse_file, content, mfi, quarter, year, fname
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not parse {fname}: {exc}")
+
+    scan["scan_type"] = scan_type
+
+    try:
+        await loop.run_in_executor(None, vuln_store.save_scan, indexer_client, scan)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Storage error for {fname}: {exc}")
+
+    out = dict(scan)
+    out.pop("findings", None)
+    out.pop("hosts", None)
+    return out
+
+
+@app.get("/vuln/scans")
+def vuln_list_scans(
+    mfi:   Optional[str] = Query(None, description="Filter by MFI name"),
+    _user: dict           = Depends(get_current_user),
+):
+    return {"scans": vuln_store.list_scans(indexer_client, mfi)}
+
+
+@app.get("/vuln/scans/{scan_id}")
+def vuln_get_scan(scan_id: str, _user: dict = Depends(get_current_user)):
+    scan = vuln_store.get_scan(indexer_client, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return scan
+
+
+@app.delete("/vuln/scans/{scan_id}", status_code=204)
+def vuln_delete_scan(scan_id: str, _user: dict = Depends(get_current_user)):
+    if not vuln_store.delete_scan(indexer_client, scan_id):
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+
+@app.get("/vuln/trends")
+def vuln_trends(_user: dict = Depends(get_current_user)):
+    return {"trends": vuln_store.get_trends(indexer_client)}
+
+
+@app.get("/vuln/report/technical")
+def vuln_report_technical(
+    mfi:     str = Query(...),
+    year:    int = Query(...),
+    quarter: str = Query(...),
+    _user:   dict = Depends(get_current_user),
+):
+    scans = vuln_store.get_scans_for_report(indexer_client, mfi, year, quarter)
+    if not scans:
+        raise HTTPException(status_code=404, detail="No scans found for this MFI/year/quarter")
+
+    internal = [s for s in scans if s.get("scan_type") == "internal"]
+    external = [s for s in scans if s.get("scan_type") == "external"]
+
+    try:
+        xlsx_bytes = vuln_report_xlsx.generate_technical_xlsx(
+            mfi, year, quarter, internal, external
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {exc}")
+
+    safe_name = f"{mfi.replace(' ', '_')}_{quarter}_{year}_Technical.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
+
+
+@app.get("/vuln/report/executive")
+def vuln_report_executive(
+    mfi:     str = Query(...),
+    year:    int = Query(...),
+    quarter: str = Query(...),
+    _user:   dict = Depends(get_current_user),
+):
+    scans = vuln_store.get_scans_for_report(indexer_client, mfi, year, quarter)
+    if not scans:
+        raise HTTPException(status_code=404, detail="No scans found for this MFI/year/quarter")
+
+    internal = [s for s in scans if s.get("scan_type") == "internal"]
+    external = [s for s in scans if s.get("scan_type") == "external"]
+
+    try:
+        pdf_bytes = vuln_report_pdf.generate_executive_pdf(
+            mfi, year, quarter, internal, external
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {exc}")
+
+    safe_name = f"{mfi.replace(' ', '_')}_{quarter}_{year}_Executive.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )

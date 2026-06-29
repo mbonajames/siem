@@ -1,0 +1,207 @@
+<div class="net-page">
+
+  <!-- Page header -->
+  <div class="page-header">
+    <div class="header-left">
+      <mat-icon class="header-icon">wifi_tethering_error</mat-icon>
+      <div>
+        <div class="page-title">Network Security</div>
+        <div class="page-sub">Darktrace · AI-Powered Network Detection &amp; Response</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-refresh" (click)="load()" title="Refresh">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Stat tiles -->
+  <div class="stat-row">
+    <div class="stat-tile" [class.tile-active]="activeFilter === ''" (click)="filterBySeverity('')">
+      <div class="tile-label">Total Alerts</div>
+      <div class="tile-val orange">{{ stats.total }}</div>
+    </div>
+    <div class="stat-tile" [class.tile-active]="activeFilter === 'Critical'" (click)="filterBySeverity('Critical')">
+      <div class="tile-label">Critical</div>
+      <div class="tile-val crit">{{ stats.critical }}</div>
+    </div>
+    <div class="stat-tile" [class.tile-active]="activeFilter === 'High'" (click)="filterBySeverity('High')">
+      <div class="tile-label">High</div>
+      <div class="tile-val high">{{ stats.high }}</div>
+    </div>
+    <div class="stat-tile" [class.tile-active]="activeFilter === 'Medium'" (click)="filterBySeverity('Medium')">
+      <div class="tile-label">Medium</div>
+      <div class="tile-val med">{{ stats.medium }}</div>
+    </div>
+    <div class="stat-tile" [class.tile-active]="activeFilter === 'Low'" (click)="filterBySeverity('Low')">
+      <div class="tile-label">Low</div>
+      <div class="tile-val low">{{ stats.low }}</div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <input class="f-input" [(ngModel)]="filterQ" placeholder="Search alerts…" (keyup.enter)="applyFilters()" />
+    <select class="f-select" [(ngModel)]="filterSeverity">
+      <option value="">All severities</option>
+      <option value="Critical">Critical</option>
+      <option value="High">High</option>
+      <option value="Medium">Medium</option>
+      <option value="Low">Low</option>
+    </select>
+    <select class="f-select narrow" [(ngModel)]="filterHours">
+      <option [value]="1">1h</option>
+      <option [value]="24">24h</option>
+      <option [value]="168">7d</option>
+      <option [value]="720">30d</option>
+    </select>
+    <button class="btn-apply" (click)="applyFilters()">
+      <mat-icon>search</mat-icon> Search
+    </button>
+    <button class="btn-clear" (click)="clearFilters()">
+      <mat-icon>clear</mat-icon>
+    </button>
+    @if (loading) { <span class="spin-dot"></span> }
+  </div>
+
+  <!-- Alert table -->
+  <div class="card list-card">
+    <div class="card-head">
+      <span>Darktrace Alerts</span>
+      <span class="result-count">{{ alerts.length }} / {{ total }}</span>
+    </div>
+
+    @if (!loading && alerts.length === 0) {
+      <div class="empty-state">
+        <mat-icon>sensors_off</mat-icon>
+        <span>No Darktrace alerts found. Adjust filters or check API connectivity.</span>
+      </div>
+    }
+
+    <div class="table-wrap">
+      <table class="alert-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Severity</th>
+            <th>Time</th>
+            <th>Model / Event Class</th>
+            <th>Host / Device</th>
+            <th>Source IP</th>
+            <th>Summary</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (alert of alerts; track alert.event_id) {
+            <tr [class.row-selected]="selected?.event_id === alert.event_id" (click)="select(alert)">
+              <td class="cell-chevron">
+                <mat-icon class="chevron-icon" [class.open]="selected?.event_id === alert.event_id">
+                  chevron_right
+                </mat-icon>
+              </td>
+              <td>
+                <span class="sev-pill" [ngClass]="severityClass(alert.severity)">
+                  {{ alert.severity }}
+                </span>
+              </td>
+              <td class="cell-time">{{ formatDate(alert.time) }}</td>
+              <td class="cell-model">
+                <div class="model-name">{{ alert.event_class || '—' }}</div>
+                <div class="model-cat">{{ alert.category }}</div>
+              </td>
+              <td class="cell-host">{{ alert.host || '—' }}</td>
+              <td class="cell-ip mono">{{ alert.src_ip || '—' }}</td>
+              <td class="cell-summary">{{ alert.summary }}</td>
+            </tr>
+            @if (selected?.event_id === alert.event_id) {
+              <tr class="detail-row">
+                <td colspan="7">
+                  <div class="inline-detail">
+
+                    <div class="detail-badges">
+                      <span class="sev-pill lg" [ngClass]="severityClass(selected!.severity)">
+                        <mat-icon class="pill-icon">warning_amber</mat-icon>
+                        {{ selected!.severity }}
+                      </span>
+                      <span class="cat-badge">{{ selected!.category }}</span>
+                      <span class="cat-badge">{{ selected!.event_class }}</span>
+                    </div>
+
+                    <div class="detail-meta-grid">
+                      <div class="dm-row">
+                        <span class="dm-label">Time</span>
+                        <span class="dm-val">{{ formatDate(selected!.time) }}</span>
+                      </div>
+                      <div class="dm-row">
+                        <span class="dm-label">Host</span>
+                        <span class="dm-val mono">{{ selected!.host || '—' }}</span>
+                      </div>
+                      <div class="dm-row">
+                        <span class="dm-label">Source IP</span>
+                        <span class="dm-val mono">{{ selected!.src_ip || '—' }}</span>
+                      </div>
+                      @if (selected!.remote_ip) {
+                        <div class="dm-row">
+                          <span class="dm-label">Remote IP</span>
+                          <span class="dm-val mono">{{ selected!.remote_ip }}</span>
+                        </div>
+                      }
+                      @if (selected!.domain) {
+                        <div class="dm-row">
+                          <span class="dm-label">Domain</span>
+                          <span class="dm-val mono">{{ selected!.domain }}</span>
+                        </div>
+                      }
+                      @if (selected!.user) {
+                        <div class="dm-row">
+                          <span class="dm-label">User</span>
+                          <span class="dm-val">{{ selected!.user }}</span>
+                        </div>
+                      }
+                      <div class="dm-row">
+                        <span class="dm-label">Event ID</span>
+                        <span class="dm-val mono small">{{ selected!.event_id }}</span>
+                      </div>
+                      <div class="dm-row">
+                        <span class="dm-label">Source</span>
+                        <span class="dm-val">{{ selected!.source }}</span>
+                      </div>
+                    </div>
+
+                    @if (selected!.mitre && selected!.mitre.length > 0) {
+                      <div class="section-label">MITRE ATT&CK</div>
+                      <div class="mitre-list">
+                        @for (t of selected!.mitre; track t.id) {
+                          <div class="mitre-chip">
+                            <div class="mitre-id">{{ t.id || 'N/A' }}</div>
+                            <div class="mitre-name">{{ t.technique }}</div>
+                            @if (t.tactics && t.tactics.length) {
+                              <div class="mitre-tactics">{{ t.tactics.join(', ') }}</div>
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+
+                    <div class="section-label">Raw Fields</div>
+                    <div class="raw-list">
+                      @for (k of rawKeys(selected!); track k) {
+                        <div class="raw-row">
+                          <div class="raw-key">{{ k }}</div>
+                          <div class="raw-val">{{ rawVal(selected!, k) }}</div>
+                        </div>
+                      }
+                    </div>
+
+                  </div>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
