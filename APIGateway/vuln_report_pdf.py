@@ -438,11 +438,19 @@ def _make_doc(buf) -> BaseDocTemplate:
 def _cover(story, mfi, year, quarter):
     story.append(Spacer(1, 3*cm))
 
-    # Hope International logo (text-based; replace with Image() if logo file is available)
-    logo_path = os.path.join(os.path.dirname(__file__), "assets", "hope_logo.png")
-    if os.path.exists(logo_path):
+    # Hope International logo — search in several locations so both dev and prod work
+    _base = os.path.dirname(__file__)
+    _candidates = [
+        os.path.join(_base, "assets", "images", "HOPE_H_black_screen_R.png"),
+        os.path.join(_base, "assets", "hope_logo.png"),
+        os.path.join(_base, "..", "siem-dashboard", "src", "assets", "images", "HOPE_H_black_screen_R.png"),
+    ]
+    logo_path = next((p for p in _candidates if os.path.exists(p)), None)
+
+    if logo_path:
         from reportlab.platypus import Image as RLImage
-        story.append(RLImage(logo_path, width=6*cm, height=2*cm, hAlign="CENTER"))
+        # Logo is 1057×404 px (≈2.62:1). Fix width at 7 cm, height proportional.
+        story.append(RLImage(logo_path, width=7*cm, height=2.67*cm, hAlign="CENTER"))
     else:
         # Stylised text fallback
         t = Table(

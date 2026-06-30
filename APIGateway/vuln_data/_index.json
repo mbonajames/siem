@@ -307,44 +307,6 @@
     "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\dd7a6b69-4715-4674-a38e-ec1fe6d8a4c1.json"
   },
   {
-    "scan_id": "b564f6c9-d71a-4cfb-9d55-428c58320a07",
-    "mfi": "Turame",
-    "quarter": "Q2",
-    "year": 2026,
-    "uploaded_at": "2026-06-29T14:51:03.749553+00:00",
-    "filename": "Turame External scan _tjot03.csv",
-    "summary": {
-      "critical": 0,
-      "high": 0,
-      "medium": 7,
-      "low": 0,
-      "info": 225,
-      "total_hosts": 4,
-      "total_findings": 232
-    },
-    "scan_type": "external",
-    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\external\\b564f6c9-d71a-4cfb-9d55-428c58320a07.json"
-  },
-  {
-    "scan_id": "80e0188a-d20a-4e25-90da-10eca11a7f6b",
-    "mfi": "Turame",
-    "quarter": "Q2",
-    "year": 2026,
-    "uploaded_at": "2026-06-29T14:51:05.947667+00:00",
-    "filename": "T24_wd5623.csv",
-    "summary": {
-      "critical": 0,
-      "high": 0,
-      "medium": 0,
-      "low": 0,
-      "info": 0,
-      "total_hosts": 0,
-      "total_findings": 0
-    },
-    "scan_type": "external",
-    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\external\\80e0188a-d20a-4e25-90da-10eca11a7f6b.json"
-  },
-  {
     "scan_id": "e0de4093-3dfd-4f7f-9f92-c607e4494cdb",
     "mfi": "Esperanza",
     "quarter": "Q2",
@@ -552,5 +514,25 @@
     },
     "scan_type": "internal",
     "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\CSU\\2026\\Q2\\internal\\7fce0e52-0457-4786-b04e-61c5c88f25a1.json"
+  },
+  {
+    "scan_id": "eba6609a-a115-48b1-9c12-22f38dfb2f02",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-30T11:30:55.089752+00:00",
+    "filename": "Turame External scan _5sa01b.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 5,
+      "low": 1,
+      "info": 43,
+      "total_findings": 49,
+      "total_hosts": 4
+    },
+    "scan_type": "external",
+    "branch": "Turame Azure IP",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\external\\eba6609a-a115-48b1-9c12-22f38dfb2f02.json"
   }
 ]
