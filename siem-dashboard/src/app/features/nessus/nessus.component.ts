@@ -10,6 +10,7 @@ import {
   NessusService,
   VulnScanSummary, VulnScan, VulnFinding, VulnFindingWithContext, VulnTrendPoint, ScanGroup,
 } from '../../core/services/nessus.service';
+import { AuthService } from '../../core/services/auth.service';
 
 Chart.register(...registerables);
 
@@ -120,7 +121,9 @@ export class NessusComponent implements OnInit, OnDestroy {
     },
   };
 
-  constructor(private svc: NessusService) {}
+  get isSocAdmin(): boolean { return this.auth.isAdmin(); }
+
+  constructor(private svc: NessusService, private auth: AuthService) {}
 
   ngOnInit(): void  { this.loadScans(); }
   ngOnDestroy(): void { clearTimeout(this.toastTimer); }

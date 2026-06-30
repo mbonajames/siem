@@ -11,8 +11,12 @@
     </div>
     <div class="header-right">
       <button class="btn-refresh" (click)="loadScans()"><mat-icon>refresh</mat-icon> Refresh</button>
-      <button class="btn-upload-trigger" (click)="showUpload = !showUpload">
+      <button class="btn-upload-trigger"
+              [disabled]="!isSocAdmin"
+              [title]="isSocAdmin ? 'Upload a Nessus scan file' : 'Upload restricted to SOC Admin'"
+              (click)="isSocAdmin && (showUpload = !showUpload)">
         <mat-icon>upload_file</mat-icon> Upload Scan
+        @if (!isSocAdmin) { <mat-icon class="lock-icon">lock</mat-icon> }
       </button>
     </div>
   </div>
@@ -182,10 +186,14 @@
                       @if (s.storage_path) {
                         <span class="sf-path" [title]="'Stored: ' + s.storage_path"><mat-icon>folder_open</mat-icon></span>
                       }
-                      <button class="sc-edit" (click)="openEditModal(s, $event)" title="Edit metadata">
+                      <button class="sc-edit" [disabled]="!isSocAdmin"
+                              [title]="isSocAdmin ? 'Edit metadata' : 'SOC Admin only'"
+                              (click)="isSocAdmin && openEditModal(s, $event)">
                         <mat-icon>edit</mat-icon>
                       </button>
-                      <button class="sc-del" (click)="deleteScan(s, $event)" title="Delete">
+                      <button class="sc-del" [disabled]="!isSocAdmin"
+                              [title]="isSocAdmin ? 'Delete scan' : 'SOC Admin only'"
+                              (click)="isSocAdmin && deleteScan(s, $event)">
                         <mat-icon>delete_outline</mat-icon>
                       </button>
                     </div>
@@ -213,10 +221,14 @@
                       @if (s.storage_path) {
                         <span class="sf-path" [title]="'Stored: ' + s.storage_path"><mat-icon>folder_open</mat-icon></span>
                       }
-                      <button class="sc-edit" (click)="openEditModal(s, $event)" title="Edit metadata">
+                      <button class="sc-edit" [disabled]="!isSocAdmin"
+                              [title]="isSocAdmin ? 'Edit metadata' : 'SOC Admin only'"
+                              (click)="isSocAdmin && openEditModal(s, $event)">
                         <mat-icon>edit</mat-icon>
                       </button>
-                      <button class="sc-del" (click)="deleteScan(s, $event)" title="Delete">
+                      <button class="sc-del" [disabled]="!isSocAdmin"
+                              [title]="isSocAdmin ? 'Delete scan' : 'SOC Admin only'"
+                              (click)="isSocAdmin && deleteScan(s, $event)">
                         <mat-icon>delete_outline</mat-icon>
                       </button>
                     </div>

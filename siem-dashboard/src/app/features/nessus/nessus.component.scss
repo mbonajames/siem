@@ -26,7 +26,16 @@
   mat-icon { font-size: 16px; width: 16px; height: 16px; }
 }
 .btn-refresh         { background: var(--siem-hover); color: var(--siem-muted); &:hover { background: var(--siem-border); } }
-.btn-upload-trigger  { background: var(--hope-orange); color: #fff; &:hover { background: var(--hope-orange-dark); } }
+.btn-upload-trigger  {
+  background: var(--hope-orange); color: #fff;
+  &:hover { background: var(--hope-orange-dark); }
+  &:disabled {
+    background: var(--siem-hover); color: var(--siem-muted);
+    cursor: not-allowed; opacity: 0.55;
+    &:hover { background: var(--siem-hover); }
+    .lock-icon { font-size: 13px; width: 13px; height: 13px; opacity: 0.7; }
+  }
+}
 
 /* ── Upload card ───────────────────────────────────────────────────────────── */
 .upload-card {
@@ -171,6 +180,7 @@
   display: flex; align-items: center; padding: 2px; border-radius: 3px; flex-shrink: 0;
   mat-icon { font-size: 15px; width: 15px; height: 15px; }
   &:hover { color: #ef4444; background: rgba(239,68,68,.1); }
+  &:disabled { opacity: 0.3; cursor: not-allowed; &:hover { color: var(--siem-muted); background: transparent; } }
 }
 .sc-sev {
   font-size: 16px; font-weight: 800; display: flex; align-items: baseline; gap: 2px;
@@ -462,6 +472,7 @@
   display: flex; align-items: center; padding: 2px; border-radius: 3px; flex-shrink: 0;
   mat-icon { font-size: 15px; width: 15px; height: 15px; }
   &:hover { color: #3b82f6; background: rgba(59,130,246,.1); }
+  &:disabled { opacity: 0.3; cursor: not-allowed; &:hover { color: var(--siem-muted); background: transparent; } }
 }
 
 /* ── Analyze All button on scan group header ───────────────────────────────── */

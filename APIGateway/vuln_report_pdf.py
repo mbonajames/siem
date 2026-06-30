@@ -4,6 +4,7 @@ Matches the Hope International template exactly.
 """
 import io
 import os
+import re
 from datetime import datetime
 
 from reportlab.lib import colors
@@ -163,7 +164,6 @@ def _bar_chart(sev_counts: dict, width=CW, height=8*cm,
         return Drawing(float(width), 20)
 
     W = float(width);  H = float(height)
-    # Margins: enough room for y-labels left, category labels bottom, title top
     LM = 38;  RM = 12;  TM = 22;  BM = 36
 
     ax_x = LM;  ax_y = BM
@@ -207,8 +207,7 @@ def _bar_chart(sev_counts: dict, width=CW, height=8*cm,
                       fontSize=9, fillColor=C_BLACK))
 
         # category name centred below bar slot
-        cat_y = ax_y - 20
-        d.add(GString(bar_x + bar_w / 2, cat_y, _SEV_LABEL[level],
+        d.add(GString(bar_x + bar_w / 2, ax_y - 20, _SEV_LABEL[level],
                       textAnchor="middle", fontName="Helvetica",
                       fontSize=9, fillColor=C_BLACK))
 
@@ -218,12 +217,11 @@ def _bar_chart(sev_counts: dict, width=CW, height=8*cm,
     d.add(Line(ax_x, ax_y, ax_x + ax_w, ax_y,
                strokeColor=C_BLACK, strokeWidth=0.8))
 
-    # ── Axis titles ───────────────────────────────────────────────────────────
     d.add(GString(W / 2, 6, "Risk Level", textAnchor="middle",
                   fontName="Helvetica", fontSize=9, fillColor=C_GREY))
     d.add(GString(9, ax_y + ax_h / 2, "Count", textAnchor="middle",
                   fontName="Helvetica", fontSize=9, fillColor=C_GREY,
-                  transform=(1, 0, 0, 1, 0, 0)))  # left side, not rotated (keeps it simple)
+                  transform=(1, 0, 0, 1, 0, 0)))
 
     return d
 
@@ -297,12 +295,23 @@ def _pie_chart(sev_counts: dict, width=CW, height=8*cm) -> Drawing:
     return d
 
 
+def _fmt_branch(scan: dict) -> str:
+    """Return a clean display name for a scan: prefer branch field, fall back to filename.
+    Strips the upload-noise suffix (_xxxxxx.ext) added by the storage layer."""
+    name = scan.get("branch") or scan.get("filename") or "scan"
+    # Remove trailing _<6-char-hash>.{csv,nessus} added on upload
+    name = re.sub(r'_[A-Za-z0-9]{4,}\.(csv|nessus)$', '', name, flags=re.IGNORECASE)
+    # Remove any remaining bare extension
+    name = re.sub(r'\.(csv|nessus)$', '', name, flags=re.IGNORECASE)
+    return name.strip() or "scan"
+
+
 def _branch_bar_chart(scans: list, width=CW, height=9*cm) -> Drawing:
     """Grouped bar chart by branch — one cluster per severity level."""
     branches = []
     seen: set = set()
     for s in scans:
-        b = s.get("branch") or s.get("filename", "scan")
+        b = _fmt_branch(s)
         if b not in seen:
             branches.append(b);  seen.add(b)
     if not branches:
@@ -315,10 +324,10 @@ def _branch_bar_chart(scans: list, width=CW, height=9*cm) -> Drawing:
     if not sev_levels:
         return Drawing(float(width), 20)
 
-    # counts[branch][sev]
+    # counts[branch_label][sev]
     counts = {}
     for s in scans:
-        b = s.get("branch") or s.get("filename", "scan")
+        b = _fmt_branch(s)
         counts.setdefault(b, {k: 0 for k in sev_levels})
         for f in s.get("findings", []):
             sev = f.get("severity", "")
@@ -326,7 +335,7 @@ def _branch_bar_chart(scans: list, width=CW, height=9*cm) -> Drawing:
                 counts[b][sev] += 1
 
     W = float(width);  H = float(height)
-    LM = 38;  RM = 90;  TM = 22;  BM = 40   # RM wide for legend
+    LM = 38;  RM = 90;  TM = 22;  BM = 85   # BM enlarged for 45° branch labels
 
     ax_x = LM;  ax_y = BM
     ax_w = W - LM - RM;  ax_h = H - TM - BM
@@ -374,11 +383,15 @@ def _branch_bar_chart(scans: list, width=CW, height=9*cm) -> Drawing:
                                   fontName="Helvetica-Bold", fontSize=7,
                                   fillColor=C_BLACK))
 
-        # Branch label below cluster (truncated to 14 chars)
-        label = branch[:14] + ("…" if len(branch) > 14 else "")
-        d.add(GString(cluster_x + (n_sev * bar_w) / 2, ax_y - 22, label,
-                      textAnchor="middle", fontName="Helvetica",
-                      fontSize=8, fillColor=C_BLACK))
+        # Branch label at -45° — left end at cluster centre, text goes down-right (below axis)
+        label = branch[:22] + ("…" if len(branch) > 22 else "")
+        _a45 = -math.pi / 4
+        _cos, _sin = math.cos(_a45), math.sin(_a45)
+        lbl_g = Group(transform=(_cos, _sin, -_sin, _cos,
+                                 cluster_x + (n_sev * bar_w) / 2, ax_y - 6))
+        lbl_g.add(GString(0, 0, label, textAnchor="start",
+                          fontName="Helvetica", fontSize=8, fillColor=C_BLACK))
+        d.add(lbl_g)
 
     # ── Axes ──────────────────────────────────────────────────────────────────
     d.add(Line(ax_x, ax_y, ax_x, ax_y + ax_h,
@@ -481,7 +494,8 @@ def _toc(story):
         ("4.2 Internal Assessment", True),
         ("5. Summary of Findings", False),
         ("6. Overall Assessment & Recommendations", False),
-        ("7. Appendix", False),
+        ("7. Remediation Plan & SLA", False),
+        ("8. Appendix", False),
     ]
     for label, sub in toc_items:
         s = S_TOCS if sub else S_TOC
@@ -743,9 +757,142 @@ def _recommendations(story, internal_scans, external_scans):
             story.append(Paragraph(f"❖  {standard}", S_BUL))
 
 
+_SLA = [
+    ("critical", "Critical", "15 days",  "Immediate — patch or apply compensating control within 15 days"),
+    ("high",     "High",     "30 days",  "Urgent — schedule patching within 30 days"),
+    ("medium",   "Medium",   "90 days",  "Planned — include in next maintenance cycle (90 days)"),
+    ("low",      "Low",      "180 days", "Scheduled — address within 6 months or accept risk"),
+    ("info",     "Info",     "Best effort", "Review finding; document risk acceptance if not actioned"),
+]
+
+
+def _remediation_sla(story, internal_scans, external_scans):
+    story.append(PageBreak())
+    story.append(Paragraph("7. Remediation Plan & SLA", S_H1))
+    story.append(_hr())
+    story.append(Paragraph(
+        "The following Service Level Agreements (SLAs) define the maximum time allowed to remediate "
+        "identified vulnerabilities based on their severity. All timelines are measured from the date "
+        "of this report.",
+        S_BODY,
+    ))
+    story.append(Spacer(1, 0.3*cm))
+
+    # ── SLA reference table ───────────────────────────────────────────────────
+    col_w = [CW * 0.12, CW * 0.13, CW * 0.55, CW * 0.20]
+    hdr_style = TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, 0), C_NAVY),
+        ("TEXTCOLOR",     (0, 0), (-1, 0), C_WHITE),
+        ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0, 0), (-1, 0), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+        ("TOPPADDING",    (0, 0), (-1, 0), 6),
+        ("LEFTPADDING",   (0, 0), (-1,-1), 7),
+        ("RIGHTPADDING",  (0, 0), (-1,-1), 7),
+        ("GRID",          (0, 0), (-1,-1), 0.4, colors.HexColor("#CCCCCC")),
+        ("VALIGN",        (0, 0), (-1,-1), "MIDDLE"),
+        ("FONTNAME",      (0, 1), (-1,-1), "Helvetica"),
+        ("FONTSIZE",      (0, 1), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0, 1), (-1,-1), [C_WHITE, C_LGREY]),
+    ])
+
+    rows = [[
+        Paragraph("<b>Severity</b>", S_CELLB),
+        Paragraph("<b>SLA</b>", S_CELLB),
+        Paragraph("<b>Required Action</b>", S_CELLB),
+        Paragraph("<b>Priority</b>", S_CELLB),
+    ]]
+    priority_label = {"critical": "P1 — Critical", "high": "P2 — High",
+                      "medium": "P3 — Medium", "low": "P4 — Low", "info": "P5 — Info"}
+    for sev, label, sla, action in _SLA:
+        bg  = SEV_CELL_BG[sev]
+        fg  = C_WHITE
+        sev_para = Paragraph(
+            f'<font color="white"><b>{label}</b></font>',
+            _ps(name=f"SLA_{sev}", fontName="Helvetica-Bold", fontSize=9, textColor=fg),
+        )
+        rows.append([
+            sev_para,
+            Paragraph(sla, S_CELL),
+            Paragraph(action, S_CELL),
+            Paragraph(priority_label[sev], S_CELL),
+        ])
+
+    tbl = Table(rows, colWidths=col_w, repeatRows=1)
+    # Apply severity background to the Severity cell only (column 0, rows 1–5)
+    cell_cmds = []
+    for row_i, (sev, *_) in enumerate(_SLA, start=1):
+        cell_cmds.append(("BACKGROUND", (0, row_i), (0, row_i), SEV_CELL_BG[sev]))
+    tbl.setStyle(TableStyle(hdr_style._cmds + cell_cmds))
+    story.append(tbl)
+    story.append(Spacer(1, 0.5*cm))
+
+    # ── Per-finding remediation table (critical & high only) ─────────────────
+    all_deduped = _dedup_findings(internal_scans + external_scans)
+    crit_high   = [f for f in all_deduped if f.get("severity") in ("critical", "high")]
+
+    if crit_high:
+        story.append(Paragraph("Critical & High Findings — Remediation Targets", S_H2))
+        story.append(Paragraph(
+            "The table below lists all unique Critical and High vulnerabilities with their "
+            "required remediation deadline based on the SLA above.",
+            S_BODY,
+        ))
+        story.append(Spacer(1, 0.2*cm))
+
+        sla_days = {"critical": 15, "high": 30}
+        col_w2 = [CW * 0.36, CW * 0.12, CW * 0.24, CW * 0.14, CW * 0.14]
+        rows2 = [[
+            Paragraph("<b>Vulnerability</b>", S_CELLB),
+            Paragraph("<b>Severity</b>", S_CELLB),
+            Paragraph("<b>Affected Host(s)</b>", S_CELLB),
+            Paragraph("<b>SLA</b>", S_CELLB),
+            Paragraph("<b>Deadline</b>", S_CELLB),
+        ]]
+        today = datetime.now()
+        for f in crit_high:
+            sev  = f.get("severity", "high")
+            days = sla_days.get(sev, 30)
+            from datetime import timedelta
+            deadline = (today + timedelta(days=days)).strftime("%d %b %Y")
+            rows2.append([
+                Paragraph(f.get("plugin_name", "—")[:60], S_CELL),
+                Paragraph(
+                    f'<font color="white"><b>{sev.upper()}</b></font>',
+                    _ps(name=f"D_{f.get('plugin_id','x')}",
+                        fontName="Helvetica-Bold", fontSize=8, textColor=C_WHITE),
+                ),
+                Paragraph((f.get("host") or "—")[:50], S_CELL),
+                Paragraph(f"{days} days", S_CELL),
+                Paragraph(deadline, S_CELL),
+            ])
+
+        tbl2 = Table(rows2, colWidths=col_w2, repeatRows=1)
+        sev_cmds2 = [
+            ("BACKGROUND",    (0, 0), (-1, 0), C_NAVY),
+            ("TEXTCOLOR",     (0, 0), (-1, 0), C_WHITE),
+            ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE",      (0, 0), (-1, 0), 9),
+            ("GRID",          (0, 0), (-1,-1), 0.4, colors.HexColor("#CCCCCC")),
+            ("LEFTPADDING",   (0, 0), (-1,-1), 6),
+            ("RIGHTPADDING",  (0, 0), (-1,-1), 6),
+            ("TOPPADDING",    (0, 0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1,-1), 4),
+            ("VALIGN",        (0, 0), (-1,-1), "TOP"),
+            ("FONTNAME",      (0, 1), (-1,-1), "Helvetica"),
+            ("FONTSIZE",      (0, 1), (-1,-1), 8),
+            ("ROWBACKGROUNDS",(0, 1), (-1,-1), [C_WHITE, C_LGREY]),
+        ]
+        for row_i, f in enumerate(crit_high, start=1):
+            sev = f.get("severity", "high")
+            sev_cmds2.append(("BACKGROUND", (1, row_i), (1, row_i), SEV_CELL_BG[sev]))
+        tbl2.setStyle(TableStyle(sev_cmds2))
+        story.append(tbl2)
+
+
 def _appendix(story):
     story.append(PageBreak())
-    story.append(Paragraph("7. Appendix", S_H1))
+    story.append(Paragraph("8. Appendix", S_H1))
     story.append(_hr())
     story.append(Paragraph("❖  External Findings", S_BUL))
     story.append(Paragraph("❖  Internal Findings", S_BUL))
@@ -769,6 +916,7 @@ def generate_executive_pdf(
     _overview(story, mfi, internal_scans, external_scans)
     _findings_table(story, internal_scans, external_scans)
     _recommendations(story, internal_scans, external_scans)
+    _remediation_sla(story, internal_scans, external_scans)
     _appendix(story)
 
     doc.build(story)
