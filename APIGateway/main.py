@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from fastapi import FastAPI, Query, HTTPException, Request, Depends, UploadFile, File
+from fastapi import FastAPI, Query, HTTPException, Request, Depends, UploadFile, File, Body
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Any
@@ -2320,6 +2320,7 @@ async def vuln_upload(
     quarter:   str        = Query(..., description="Q1 | Q2 | Q3 | Q4"),
     year:      int        = Query(..., description="Assessment year, e.g. 2025"),
     scan_type: str        = Query("internal", description="internal | external"),
+    branch:    str        = Query("", description="Branch/office name (optional)"),
     file:      UploadFile = File(...),
     _user:     dict       = Depends(get_current_user),
 ):
@@ -2343,6 +2344,8 @@ async def vuln_upload(
         raise HTTPException(status_code=422, detail=f"Could not parse {fname}: {exc}")
 
     scan["scan_type"] = scan_type
+    if branch:
+        scan["branch"] = branch
 
     try:
         await loop.run_in_executor(None, vuln_store.save_scan, indexer_client, scan)
@@ -2375,6 +2378,20 @@ def vuln_get_scan(scan_id: str, _user: dict = Depends(get_current_user)):
 def vuln_delete_scan(scan_id: str, _user: dict = Depends(get_current_user)):
     if not vuln_store.delete_scan(indexer_client, scan_id):
         raise HTTPException(status_code=404, detail="Scan not found")
+
+
+@app.patch("/vuln/scans/{scan_id}")
+def vuln_update_scan(
+    scan_id: str,
+    body:    dict = Body(...),
+    _user:   dict = Depends(get_current_user),
+):
+    allowed = {"mfi", "branch", "quarter", "year", "scan_type"}
+    meta    = {k: v for k, v in body.items() if k in allowed}
+    updated = vuln_store.update_scan_meta(indexer_client, scan_id, meta)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return updated
 
 
 @app.get("/vuln/trends")

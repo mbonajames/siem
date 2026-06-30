@@ -16,6 +16,20 @@ _RISK_TO_SEV = {
 }
 _SEV_NUM = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
+
+def _unique_summary(findings: list) -> dict:
+    """Count unique vulnerabilities by plugin_id (not per-host occurrences)."""
+    summary = {s: 0 for s in SEVERITY_ORDER}
+    seen: set = set()
+    for f in findings:
+        key = f.get("plugin_id") or f.get("plugin_name", "unknown")
+        if key and key not in seen:
+            seen.add(key)
+            summary[f.get("severity", "info")] += 1
+    summary["total_findings"] = len(seen)
+    return summary
+
+
 # ── CSV parser (Nessus CSV export) ────────────────────────────────────────────
 
 def parse_nessus_csv(content: bytes, mfi: str, quarter: str, year: int, filename: str) -> dict:
@@ -23,16 +37,13 @@ def parse_nessus_csv(content: bytes, mfi: str, quarter: str, year: int, filename
     reader = csv.DictReader(io.StringIO(text))
 
     findings  = []
-    hosts_map = {}   # ip → counts dict
-    summary   = {s: 0 for s in SEVERITY_ORDER}
+    hosts_map = {}   # ip → per-host counts dict
 
     for row in reader:
         host    = (row.get("Host") or "").strip()
         risk    = (row.get("Risk") or "").strip().lower()
         sev     = _RISK_TO_SEV.get(risk, "info")
         sev_num = _SEV_NUM[sev]
-
-        summary[sev] += 1
 
         if host not in hosts_map:
             hosts_map[host] = {"name": host, "ip": host, "os": "", "fqdn": "",
@@ -61,9 +72,10 @@ def parse_nessus_csv(content: bytes, mfi: str, quarter: str, year: int, filename
             "plugin_output":(row.get("Plugin Output") or "").strip()[:1500],
         })
 
-    hosts = list(hosts_map.values())
+    hosts   = list(hosts_map.values())
+    # summary counts unique vulnerabilities (by plugin_id), not host occurrences
+    summary = _unique_summary(findings)
     summary["total_hosts"]    = len(hosts)
-    summary["total_findings"] = len(findings)
 
     return {
         "scan_id":     str(uuid.uuid4()),
@@ -74,7 +86,7 @@ def parse_nessus_csv(content: bytes, mfi: str, quarter: str, year: int, filename
         "filename":    filename,
         "summary":     summary,
         "hosts":       hosts,
-        "findings":    findings,
+        "findings":    findings,      # all raw findings kept; dedup done at report time
     }
 
 
@@ -87,7 +99,6 @@ def parse_nessus_xml(content: bytes, mfi: str, quarter: str, year: int, filename
     root    = ET.fromstring(content)
     hosts   = []
     findings = []
-    summary  = {s: 0 for s in SEVERITY_ORDER}
 
     for report in root.iter("Report"):
         for rhost in report.findall("ReportHost"):
@@ -99,7 +110,6 @@ def parse_nessus_xml(content: bytes, mfi: str, quarter: str, year: int, filename
                 sev     = _XML_SEV_MAP.get(int(item.get("severity", 0)), "info")
                 sev_num = _SEV_NUM[sev]
                 host_counts[sev] += 1
-                summary[sev]     += 1
 
                 findings.append({
                     "plugin_id":    item.get("pluginID", ""),
@@ -128,8 +138,8 @@ def parse_nessus_xml(content: bytes, mfi: str, quarter: str, year: int, filename
                 **host_counts,
             })
 
-    summary["total_hosts"]    = len(hosts)
-    summary["total_findings"] = len(findings)
+    summary = _unique_summary(findings)
+    summary["total_hosts"] = len(hosts)
 
     return {
         "scan_id":     str(uuid.uuid4()),

@@ -1,0 +1,556 @@
+[
+  {
+    "scan_id": "400710f6-d61f-4ee5-9adc-e0ec469be816",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:09:23.117000+00:00",
+    "filename": "Primary DC_hihxv9.csv",
+    "summary": {
+      "critical": 44,
+      "high": 113,
+      "medium": 203,
+      "low": 40,
+      "info": 6169,
+      "total_hosts": 815,
+      "total_findings": 6569
+    },
+    "scan_type": "internal",
+    "branch": "Primary DC",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\400710f6-d61f-4ee5-9adc-e0ec469be816.json"
+  },
+  {
+    "scan_id": "9ae4db2c-9e40-49fe-920c-2bde03a533fa",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:18:44.674087+00:00",
+    "filename": "system Networks_nvp7gz.csv",
+    "summary": {
+      "critical": 0,
+      "high": 2,
+      "medium": 82,
+      "low": 25,
+      "info": 6404,
+      "total_hosts": 977,
+      "total_findings": 6513
+    },
+    "scan_type": "internal",
+    "branch": "System Networks ",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\9ae4db2c-9e40-49fe-920c-2bde03a533fa.json"
+  },
+  {
+    "scan_id": "2aa6b4e5-c1f5-4f36-b33e-696786774c8c",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:24:57.912970+00:00",
+    "filename": "Urwego Public Network_0p0ibk.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 35,
+      "total_hosts": 6,
+      "total_findings": 35
+    },
+    "scan_type": "external",
+    "branch": "Urwego Public servers",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\external\\2aa6b4e5-c1f5-4f36-b33e-696786774c8c.json"
+  },
+  {
+    "scan_id": "f4a96b4f-b4cf-42bf-b745-0faa862eb606",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:27:01.418010+00:00",
+    "filename": "Urwego Public Apps_ixs362.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 1,
+      "low": 0,
+      "info": 47,
+      "total_hosts": 3,
+      "total_findings": 48
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\f4a96b4f-b4cf-42bf-b745-0faa862eb606.json"
+  },
+  {
+    "scan_id": "6831e4fa-e750-4df9-9039-27f26e39cb8b",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:27:31.644500+00:00",
+    "filename": "Active Directory check_rwficz.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 6,
+      "total_hosts": 2,
+      "total_findings": 6
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\6831e4fa-e750-4df9-9039-27f26e39cb8b.json"
+  },
+  {
+    "scan_id": "04fdb597-08a1-47bc-a30e-3b39336ba0a5",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:28:11.152424+00:00",
+    "filename": "Urwego Webs_z61wls.csv",
+    "summary": {
+      "critical": 4,
+      "high": 15,
+      "medium": 13,
+      "low": 4,
+      "info": 60,
+      "total_hosts": 5,
+      "total_findings": 96
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\04fdb597-08a1-47bc-a30e-3b39336ba0a5.json"
+  },
+  {
+    "scan_id": "2ecc2dec-aa88-4445-8668-8619a27bc4a0",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:28:34.184530+00:00",
+    "filename": "HQ_a1idpe.csv",
+    "summary": {
+      "critical": 0,
+      "high": 7,
+      "medium": 158,
+      "low": 68,
+      "info": 2511,
+      "total_hosts": 72,
+      "total_findings": 2744
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\2ecc2dec-aa88-4445-8668-8619a27bc4a0.json"
+  },
+  {
+    "scan_id": "7fb537f7-ac79-4b3e-9a3c-35ed93f80c3a",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:29:29.720445+00:00",
+    "filename": "Internal Servers_6uzioh.csv",
+    "summary": {
+      "critical": 0,
+      "high": 6,
+      "medium": 46,
+      "low": 11,
+      "info": 444,
+      "total_hosts": 13,
+      "total_findings": 507
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\7fb537f7-ac79-4b3e-9a3c-35ed93f80c3a.json"
+  },
+  {
+    "scan_id": "7ccba1c8-278d-4f06-9d39-f52ebbd8cf76",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:30:24.161487+00:00",
+    "filename": "Branches_fmrgu1.csv",
+    "summary": {
+      "critical": 0,
+      "high": 5,
+      "medium": 73,
+      "low": 44,
+      "info": 6713,
+      "total_hosts": 1016,
+      "total_findings": 6835
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\7ccba1c8-278d-4f06-9d39-f52ebbd8cf76.json"
+  },
+  {
+    "scan_id": "77480f59-eb36-4cf2-9f28-9aaa4df4092d",
+    "mfi": "Urwego Finance",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:36:56.037382+00:00",
+    "filename": "DR_1boucx.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 5,
+      "low": 3,
+      "info": 152,
+      "total_hosts": 4,
+      "total_findings": 160
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Urwego Finance\\2026\\Q2\\internal\\77480f59-eb36-4cf2-9f28-9aaa4df4092d.json"
+  },
+  {
+    "scan_id": "d2273c57-010e-4a1b-9d56-42ef74fcd6e1",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:48:52.905323+00:00",
+    "filename": "Gitega_0yxcj4.csv",
+    "summary": {
+      "critical": 0,
+      "high": 1,
+      "medium": 12,
+      "low": 4,
+      "info": 231,
+      "total_hosts": 21,
+      "total_findings": 248
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\d2273c57-010e-4a1b-9d56-42ef74fcd6e1.json"
+  },
+  {
+    "scan_id": "d9961da6-9f3f-480f-8150-1627dcae63d6",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:49:03.572567+00:00",
+    "filename": "HQ_qudd70.csv",
+    "summary": {
+      "critical": 0,
+      "high": 7,
+      "medium": 40,
+      "low": 33,
+      "info": 687,
+      "total_hosts": 43,
+      "total_findings": 767
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\d9961da6-9f3f-480f-8150-1627dcae63d6.json"
+  },
+  {
+    "scan_id": "2ffbbcf7-cd6c-4f09-ae12-44cbe209cf5e",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:49:14.614000+00:00",
+    "filename": "Kamenge_kzdqlh.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0,
+      "info": 293,
+      "total_hosts": 31,
+      "total_findings": 297
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\2ffbbcf7-cd6c-4f09-ae12-44cbe209cf5e.json"
+  },
+  {
+    "scan_id": "24d22474-6cad-4c0e-8102-9d6bc510a11c",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:49:21.324479+00:00",
+    "filename": "Ngozi_9hun0c.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 2,
+      "low": 0,
+      "info": 196,
+      "total_hosts": 23,
+      "total_findings": 198
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\24d22474-6cad-4c0e-8102-9d6bc510a11c.json"
+  },
+  {
+    "scan_id": "2ad8c6ee-5607-42de-9ea8-edfce4758b5b",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:49:25.500161+00:00",
+    "filename": "Kayanza_nqstda.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0,
+      "info": 176,
+      "total_hosts": 16,
+      "total_findings": 180
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\2ad8c6ee-5607-42de-9ea8-edfce4758b5b.json"
+  },
+  {
+    "scan_id": "dd7a6b69-4715-4674-a38e-ec1fe6d8a4c1",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:49:28.953053+00:00",
+    "filename": "Muyinga_xf1ofd.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 151,
+      "total_hosts": 17,
+      "total_findings": 151
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\internal\\dd7a6b69-4715-4674-a38e-ec1fe6d8a4c1.json"
+  },
+  {
+    "scan_id": "b564f6c9-d71a-4cfb-9d55-428c58320a07",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:51:03.749553+00:00",
+    "filename": "Turame External scan _tjot03.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 7,
+      "low": 0,
+      "info": 225,
+      "total_hosts": 4,
+      "total_findings": 232
+    },
+    "scan_type": "external",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\external\\b564f6c9-d71a-4cfb-9d55-428c58320a07.json"
+  },
+  {
+    "scan_id": "80e0188a-d20a-4e25-90da-10eca11a7f6b",
+    "mfi": "Turame",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T14:51:05.947667+00:00",
+    "filename": "T24_wd5623.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0,
+      "total_hosts": 0,
+      "total_findings": 0
+    },
+    "scan_type": "external",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Turame\\2026\\Q2\\external\\80e0188a-d20a-4e25-90da-10eca11a7f6b.json"
+  },
+  {
+    "scan_id": "e0de4093-3dfd-4f7f-9f92-c607e4494cdb",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:00:35.956039+00:00",
+    "filename": "DC 02_i6n12m.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 31,
+      "total_hosts": 1,
+      "total_findings": 31
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\internal\\e0de4093-3dfd-4f7f-9f92-c607e4494cdb.json"
+  },
+  {
+    "scan_id": "541e7821-ff73-4c90-afb1-a54e2044167b",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:00:36.855606+00:00",
+    "filename": "App Server_q3mmne.csv",
+    "summary": {
+      "critical": 0,
+      "high": 2,
+      "medium": 7,
+      "low": 0,
+      "info": 68,
+      "total_hosts": 1,
+      "total_findings": 77
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\internal\\541e7821-ff73-4c90-afb1-a54e2044167b.json"
+  },
+  {
+    "scan_id": "c2225ede-4d0a-4fa0-bb0b-8e89179be07a",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:00:38.289924+00:00",
+    "filename": "Virtual Server_6upji9.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 6,
+      "low": 0,
+      "info": 44,
+      "total_hosts": 1,
+      "total_findings": 50
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\internal\\c2225ede-4d0a-4fa0-bb0b-8e89179be07a.json"
+  },
+  {
+    "scan_id": "10ca961b-1a03-4018-bc76-4463166d33ed",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:00:39.110396+00:00",
+    "filename": "Server NAS_4h27ac.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0,
+      "info": 71,
+      "total_hosts": 1,
+      "total_findings": 75
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\internal\\10ca961b-1a03-4018-bc76-4463166d33ed.json"
+  },
+  {
+    "scan_id": "b8e3669f-0731-4e9f-9971-ca8642ab03b6",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:00:40.707774+00:00",
+    "filename": "SDE_pk6nyi.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 94,
+      "total_hosts": 30,
+      "total_findings": 94
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\internal\\b8e3669f-0731-4e9f-9971-ca8642ab03b6.json"
+  },
+  {
+    "scan_id": "7cda7dc4-4d87-4f7b-b692-add47b1aef84",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:00:42.886160+00:00",
+    "filename": "OCS_zlpnfe.csv",
+    "summary": {
+      "critical": 0,
+      "high": 3,
+      "medium": 16,
+      "low": 0,
+      "info": 238,
+      "total_hosts": 18,
+      "total_findings": 257
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\internal\\7cda7dc4-4d87-4f7b-b692-add47b1aef84.json"
+  },
+  {
+    "scan_id": "96435ec8-1fd5-4091-8093-617786572695",
+    "mfi": "Esperanza",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:01:05.784759+00:00",
+    "filename": "Esperanza External assets_6wbb1h.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 27,
+      "total_hosts": 1,
+      "total_findings": 27
+    },
+    "scan_type": "external",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Esperanza\\2026\\Q2\\external\\96435ec8-1fd5-4091-8093-617786572695.json"
+  },
+  {
+    "scan_id": "7931d5f9-affb-4e06-9a3c-ba33981957c2",
+    "mfi": "Hope Congo",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:02:17.524852+00:00",
+    "filename": "congo External_mdadf6.csv",
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0,
+      "info": 187,
+      "total_hosts": 7,
+      "total_findings": 191
+    },
+    "scan_type": "external",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Hope Congo\\2026\\Q2\\external\\7931d5f9-affb-4e06-9a3c-ba33981957c2.json"
+  },
+  {
+    "scan_id": "d4317c15-446a-4406-baf1-d7b0eea58293",
+    "mfi": "Ukraine",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:03:40.253441+00:00",
+    "filename": "Test server_v0zsj9.csv",
+    "summary": {
+      "critical": 12,
+      "high": 11,
+      "medium": 18,
+      "low": 2,
+      "info": 115,
+      "total_hosts": 1,
+      "total_findings": 158
+    },
+    "scan_type": "external",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Ukraine\\2026\\Q2\\external\\d4317c15-446a-4406-baf1-d7b0eea58293.json"
+  },
+  {
+    "scan_id": "6d84e542-cdad-4452-91c6-5132532a7141",
+    "mfi": "Ukraine",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:03:42.272239+00:00",
+    "filename": "External_qvjmm7.csv",
+    "summary": {
+      "critical": 6,
+      "high": 4,
+      "medium": 8,
+      "low": 0,
+      "info": 113,
+      "total_hosts": 4,
+      "total_findings": 131
+    },
+    "scan_type": "external",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\Ukraine\\2026\\Q2\\external\\6d84e542-cdad-4452-91c6-5132532a7141.json"
+  },
+  {
+    "scan_id": "7fce0e52-0457-4786-b04e-61c5c88f25a1",
+    "mfi": "CSU",
+    "quarter": "Q2",
+    "year": 2026,
+    "uploaded_at": "2026-06-29T15:35:38.959393+00:00",
+    "filename": "CSU Kigali_dx7c4i.csv",
+    "summary": {
+      "critical": 0,
+      "high": 1,
+      "medium": 17,
+      "low": 10,
+      "info": 271,
+      "total_hosts": 13,
+      "total_findings": 299
+    },
+    "scan_type": "internal",
+    "storage_path": "C:\\Users\\jmbonabucya-alt\\Documents\\SIEM\\APIGateway\\vuln_data\\CSU\\2026\\Q2\\internal\\7fce0e52-0457-4786-b04e-61c5c88f25a1.json"
+  }
+]

@@ -33,13 +33,13 @@ _BORDER        = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _CENTER        = Alignment(horizontal="center", vertical="center")
 
 _FINDINGS_HEADERS = [
-    "Severity", "Host", "Port", "Protocol",
+    "Severity", "Affected Host(s)", "Port", "Protocol",
     "Plugin ID", "Vulnerability Name",
     "CVE", "CVSS v3", "CVSS v2", "Risk Factor",
     "Description", "Solution",
 ]
 
-_COL_WIDTHS = [12, 18, 8, 10, 10, 40, 22, 9, 9, 12, 60, 60]
+_COL_WIDTHS = [12, 28, 8, 10, 10, 40, 22, 9, 9, 12, 60, 60]
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -58,13 +58,38 @@ def _write_header_row(ws, row: int, headers: list):
         cell.alignment = _CENTER
 
 
-def _merge_findings(scan_list: list) -> list:
-    """Flatten and sort findings from multiple scan documents."""
-    out = []
+def _dedup_findings(scan_list: list) -> list:
+    """Deduplicate by plugin_id across all scans; merge affected hosts into one row."""
+    seen: dict = {}   # plugin_key → index in result
+    result: list = []
     for scan in scan_list:
         for f in scan.get("findings", []):
-            out.append(f)
-    return sorted(out, key=lambda f: _SEV_ORDER.get(f.get("severity", "info"), 4))
+            key = f.get("plugin_id") or f.get("plugin_name", "unknown")
+            if key not in seen:
+                entry = {**f, "_hosts": set()}
+                h = f.get("host", "")
+                if h:
+                    entry["_hosts"].add(h)
+                seen[key] = len(result)
+                result.append(entry)
+            else:
+                h = f.get("host", "")
+                if h:
+                    result[seen[key]]["_hosts"].add(h)
+    for f in result:
+        hosts = sorted(f.pop("_hosts", set()))
+        f["host"] = ", ".join(hosts) if hosts else "—"
+    return sorted(result, key=lambda f: _SEV_ORDER.get(f.get("severity", "info"), 4))
+
+
+def _sev_counts(deduped: list) -> dict:
+    """Count unique findings by severity from a deduplicated list."""
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for f in deduped:
+        sev = f.get("severity", "info")
+        counts[sev] = counts.get(sev, 0) + 1
+    counts["total_findings"] = len(deduped)
+    return counts
 
 
 def _write_findings_sheet(ws, findings: list, sheet_label: str):
@@ -119,46 +144,44 @@ def _write_findings_sheet(ws, findings: list, sheet_label: str):
 
 
 def _write_summary_sheet(ws, mfi: str, year: int, quarter: str,
-                          internal_scans: list, external_scans: list):
+                          internal_scans: list, external_scans: list,
+                          int_deduped: list, ext_deduped: list):
     ws.title = "Summary"
 
     # ── report title ──
-    ws.merge_cells("A1:F1")
+    ws.merge_cells("A1:H1")
     tc = ws["A1"]
     tc.value     = f"Vulnerability Assessment — {mfi}  |  {quarter} {year}"
     tc.font      = Font(name="Calibri", bold=True, size=16, color="1F3864")
     tc.alignment = _CENTER
     ws.row_dimensions[1].height = 36
 
-    ws.merge_cells("A2:F2")
-    ws["A2"].value     = "Technical Summary Report"
+    ws.merge_cells("A2:H2")
+    ws["A2"].value     = "Technical Summary Report (unique vulnerabilities by name)"
     ws["A2"].font      = Font(name="Calibri", size=11, color="666666")
     ws["A2"].alignment = _CENTER
 
-    # ── severity totals table ──
-    def _sum(scans, sev):
-        return sum(s.get("summary", {}).get(sev, 0) for s in scans)
+    # ── severity totals — computed from deduplicated findings ──
+    int_counts  = _sev_counts(int_deduped)
+    ext_counts  = _sev_counts(ext_deduped)
+    all_deduped = _dedup_findings(internal_scans + external_scans)
+    all_counts  = _sev_counts(all_deduped)
 
-    headers = ["", "Critical", "High", "Medium", "Low", "Info", "Total Findings", "Total Hosts"]
+    int_hosts = sum(len(set(h["ip"] for h in s.get("hosts", []))) for s in internal_scans)
+    ext_hosts = sum(len(set(h["ip"] for h in s.get("hosts", []))) for s in external_scans)
+
+    headers = ["", "Critical", "High", "Medium", "Low", "Info", "Unique Vulns", "Total Hosts"]
     rows = [
         ["Internal",
-         _sum(internal_scans, "critical"), _sum(internal_scans, "high"),
-         _sum(internal_scans, "medium"),   _sum(internal_scans, "low"),
-         _sum(internal_scans, "info"),
-         _sum(internal_scans, "total_findings"), _sum(internal_scans, "total_hosts")],
+         int_counts["critical"], int_counts["high"], int_counts["medium"],
+         int_counts["low"],      int_counts["info"],  int_counts["total_findings"], int_hosts],
         ["External",
-         _sum(external_scans, "critical"), _sum(external_scans, "high"),
-         _sum(external_scans, "medium"),   _sum(external_scans, "low"),
-         _sum(external_scans, "info"),
-         _sum(external_scans, "total_findings"), _sum(external_scans, "total_hosts")],
+         ext_counts["critical"], ext_counts["high"], ext_counts["medium"],
+         ext_counts["low"],      ext_counts["info"],  ext_counts["total_findings"], ext_hosts],
         ["Combined",
-         _sum(internal_scans + external_scans, "critical"),
-         _sum(internal_scans + external_scans, "high"),
-         _sum(internal_scans + external_scans, "medium"),
-         _sum(internal_scans + external_scans, "low"),
-         _sum(internal_scans + external_scans, "info"),
-         _sum(internal_scans + external_scans, "total_findings"),
-         _sum(internal_scans + external_scans, "total_hosts")],
+         all_counts["critical"], all_counts["high"], all_counts["medium"],
+         all_counts["low"],      all_counts["info"],  all_counts["total_findings"],
+         int_hosts + ext_hosts],
     ]
 
     start_row = 4
@@ -205,15 +228,20 @@ def _write_summary_sheet(ws, mfi: str, year: int, quarter: str,
 
 def generate_technical_xlsx(mfi: str, year: int, quarter: str,
                              internal_scans: list, external_scans: list) -> bytes:
+    int_deduped = _dedup_findings(internal_scans)
+    ext_deduped = _dedup_findings(external_scans)
+
     wb = Workbook()
     ws_summary = wb.active
-    _write_summary_sheet(ws_summary, mfi, year, quarter, internal_scans, external_scans)
+    _write_summary_sheet(ws_summary, mfi, year, quarter,
+                         internal_scans, external_scans,
+                         int_deduped, ext_deduped)
 
     ws_int = wb.create_sheet()
-    _write_findings_sheet(ws_int, _merge_findings(internal_scans), "Internal")
+    _write_findings_sheet(ws_int, int_deduped, "Internal")
 
     ws_ext = wb.create_sheet()
-    _write_findings_sheet(ws_ext, _merge_findings(external_scans), "External")
+    _write_findings_sheet(ws_ext, ext_deduped, "External")
 
     buf = io.BytesIO()
     wb.save(buf)

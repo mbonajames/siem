@@ -24,7 +24,8 @@ indexer_client = OpenSearch(
         os.getenv("WAZUH_INDEXER_PASSWORD")
     ),
     use_ssl=True,
-    verify_certs=False
+    verify_certs=False,
+    timeout=120,
 )
 
 # ── Sophos Central ────────────────────────────────────────────────────────────
