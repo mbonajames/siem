@@ -131,12 +131,30 @@ def list_scans(client, mfi: str = None) -> list:
     return index
 
 
+def _resolve_path(entry: dict) -> "Path | None":
+    """Return the scan file Path, trying stored path first then rebuilding from metadata."""
+    stored = Path(entry.get("storage_path", ""))
+    if stored.exists():
+        return stored
+    # Stored path is stale (container rebuild / path migration) — rebuild from metadata
+    rebuilt = _scan_path(entry)
+    if rebuilt.exists():
+        # Heal the index so next lookup is direct
+        index = [
+            {**e, "storage_path": str(rebuilt)} if e.get("scan_id") == entry["scan_id"] else e
+            for e in _load_index()
+        ]
+        _save_index(index)
+        return rebuilt
+    return None
+
+
 def get_scan(client, scan_id: str) -> dict | None:
     entry = next((e for e in _load_index() if e.get("scan_id") == scan_id), None)
     if not entry:
         return None
-    path = Path(entry.get("storage_path", ""))
-    if not path.exists():
+    path = _resolve_path(entry)
+    if not path:
         return None
     with open(path, "r", encoding="utf-8") as f:
         scan = json.load(f)
@@ -148,9 +166,9 @@ def delete_scan(client, scan_id: str) -> bool:
     entry = next((e for e in index if e.get("scan_id") == scan_id), None)
     if not entry:
         return False
-    path = Path(entry.get("storage_path", ""))
-    if path.exists():
-        path.unlink()
+    path = _resolve_path(entry)
+    if path:
+        path.unlink(missing_ok=True)
     _save_index([e for e in index if e.get("scan_id") != scan_id])
     _os_delete(client, scan_id)
     return True
@@ -162,8 +180,8 @@ def update_scan_meta(client, scan_id: str, meta: dict) -> dict | None:
     if not entry:
         return None
 
-    old_path = Path(entry.get("storage_path", ""))
-    if not old_path.exists():
+    old_path = _resolve_path(entry)
+    if not old_path:
         return None
 
     with open(old_path, "r", encoding="utf-8") as f:
@@ -195,8 +213,8 @@ def get_scans_for_report(client, mfi: str, year: int, quarter: str) -> list:
     ]
     scans = []
     for entry in matching:
-        path = Path(entry.get("storage_path", ""))
-        if path.exists():
+        path = _resolve_path(entry)
+        if path:
             with open(path, "r", encoding="utf-8") as f:
                 scans.append(json.load(f))
     return scans

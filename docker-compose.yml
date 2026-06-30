@@ -5,6 +5,11 @@ services:
     container_name: siem-api
     restart: unless-stopped
     env_file: ./APIGateway/.env
+    environment:
+      - VULN_STORAGE_PATH=/app/vuln_data
+    volumes:
+      - vuln_data:/app/vuln_data
+      - ./siem-dashboard/src/assets/images:/app/assets/images:ro
     networks:
       - siem-net
     # Port 8000 is NOT exposed externally — only reachable via the nginx proxy
@@ -22,6 +27,10 @@ services:
       - backend
     networks:
       - siem-net
+
+volumes:
+  vuln_data:
+    driver: local
 
 networks:
   siem-net:
