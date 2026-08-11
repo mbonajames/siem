@@ -103,8 +103,8 @@ $pb: 1px solid var(--siem-border);
 
 // minmax(0,1fr) forces the summary column to shrink; plain 1fr = minmax(auto,1fr)
 // which lets long text expand the column and push headers out of alignment.
-$cols-full:   130px 90px 110px 120px minmax(0,1fr) 150px 110px 32px;
-$cols-laptop: 110px 80px 100px 100px minmax(0,1fr) 130px  90px 30px;
+$cols-full:   28px 130px 90px 110px 120px minmax(0,1fr) 150px 70px 110px 32px;
+$cols-laptop: 28px 110px 80px 100px 100px minmax(0,1fr) 130px 65px  90px 30px;
 
 .alert-hdr,
 .alert-row {
@@ -143,14 +143,16 @@ $cols-laptop: 110px 80px 100px 100px minmax(0,1fr) 130px  90px 30px;
 
 // ── Columns ───────────────────────────────────────────────────────────────────
 // Every cell needs min-width:0 so grid tracks can't grow past their declared size.
-.col-time { font-size: 12px; font-family: monospace; color: var(--siem-text-secondary); min-width: 0; overflow: hidden; }
-.col-sev  { min-width: 0; }
-.col-src  { min-width: 0; overflow: hidden; }
-.col-cat  { min-width: 0; overflow: hidden; }
-.col-desc { min-width: 0; overflow: hidden; }
-.col-ent  { min-width: 0; overflow: hidden; }
-.col-jira { min-width: 0; overflow: hidden; }
-.col-act  { display: flex; justify-content: flex-end; min-width: 0; }
+.col-chk   { display: flex; align-items: center; min-width: 0; }
+.col-time  { font-size: 12px; font-family: monospace; color: var(--siem-text-secondary); min-width: 0; overflow: hidden; }
+.col-sev   { min-width: 0; }
+.col-src   { min-width: 0; overflow: hidden; }
+.col-cat   { min-width: 0; overflow: hidden; }
+.col-desc  { min-width: 0; overflow: hidden; }
+.col-ent   { min-width: 0; overflow: hidden; }
+.col-status { min-width: 0; overflow: hidden; }
+.col-jira  { min-width: 0; overflow: hidden; }
+.col-act   { display: flex; justify-content: flex-end; min-width: 0; }
 
 .src-chip {
   display: inline-flex; align-items: center; gap: 3px;
@@ -881,5 +883,54 @@ $cols-laptop: 110px 80px 100px 100px minmax(0,1fr) 130px  90px 30px;
   padding: 8px;
   max-height: 160px;
   overflow-y: auto;
+}
+
+// ── Checkbox ──────────────────────────────────────────────────────────────────
+.row-checkbox {
+  width: 14px; height: 14px; cursor: pointer;
+  accent-color: #818cf8;
+}
+
+.row-selected { background: rgba(99,102,241,0.08) !important; }
+
+// ── Status chip ───────────────────────────────────────────────────────────────
+.status-chip {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700; border-radius: 4px;
+  padding: 2px 6px; cursor: pointer; text-transform: uppercase;
+  letter-spacing: 0.04em;
+  &.status-new    { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+  &.status-ack    { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+  &.status-closed { background: rgba(75,85,99,0.15);   color: #9ca3af; border: 1px solid rgba(75,85,99,0.3);   cursor: default; }
+}
+
+// ── Batch action bar ──────────────────────────────────────────────────────────
+.batch-action-bar {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1e2230; border: 1px solid rgba(99,102,241,0.4);
+  border-radius: 10px; padding: 10px 16px;
+  display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 1000;
+}
+
+.batch-count {
+  font-size: 13px; font-weight: 600; color: #818cf8; white-space: nowrap;
+}
+
+.batch-actions { display: flex; gap: 8px; align-items: center; }
+
+.batch-btn {
+  background: rgba(99,102,241,0.2) !important;
+  color: #818cf8 !important;
+  font-size: 12px; height: 32px;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  &:hover { background: rgba(99,102,241,0.35) !important; }
+}
+
+.batch-clear {
+  font-size: 12px; height: 32px; color: rgba(255,255,255,0.5) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
 }
 

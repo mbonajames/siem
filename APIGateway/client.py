@@ -287,21 +287,34 @@ class WazuhServerClient:
 
     def get(self, path: str, params: dict | None = None) -> dict:
         self._ensure_token()
-        r = self._session.get(
-            f"{self.base_url}{path}",
-            headers={"Authorization": f"Bearer {self._token}"},
-            params=params,
-            timeout=15,
-        )
+        url = f"{self.base_url}{path}"
+        try:
+            r = self._session.get(
+                url,
+                headers={"Authorization": f"Bearer {self._token}"},
+                params=params,
+                timeout=30,
+            )
+        except requests.exceptions.SSLError as exc:
+            raise RuntimeError(f"SSL error on Wazuh API {path}: {exc}") from exc
+        except requests.exceptions.ConnectionError as exc:
+            raise RuntimeError(f"Cannot reach Wazuh API at {self.base_url} — is port 55000 open? ({exc})") from exc
+        except requests.exceptions.Timeout:
+            raise RuntimeError(f"Wazuh API {path} timed out (30 s)") from None
+
         if r.status_code == 401:
             # Token may have been revoked — re-auth once and retry
             self._authenticate()
-            r = self._session.get(
-                f"{self.base_url}{path}",
-                headers={"Authorization": f"Bearer {self._token}"},
-                params=params,
-                timeout=15,
-            )
+            try:
+                r = self._session.get(
+                    url,
+                    headers={"Authorization": f"Bearer {self._token}"},
+                    params=params,
+                    timeout=30,
+                )
+            except requests.exceptions.RequestException as exc:
+                raise RuntimeError(f"Wazuh API {path} failed after token refresh: {exc}") from exc
+
         if not r.ok:
             try:
                 body = r.json()

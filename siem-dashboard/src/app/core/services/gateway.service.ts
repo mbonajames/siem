@@ -213,9 +213,11 @@ export interface VtResult {
 // ── Custom dashboards ─────────────────────────────────────────────────────────
 
 export type WidgetType =
-  | 'severity-tiles' | 'recent-alerts' | 'source-pie' | 'category-pie'
+  | 'severity-tiles' | 'recent-alerts' | 'source-pie'    | 'category-pie'
   | 'top-hosts'      | 'top-users'     | 'ioc-summary'
   | 'severity-bars'  | 'source-bars'   | 'stat-card'
+  | 'alerts-timeline'| 'activity-heatmap' | 'top-categories'
+  | 'tool-tiles'
   | 'divider'        | 'text';
 
 export type WidgetSize = 'quarter' | 'half' | 'three-quarter' | 'full';
@@ -249,19 +251,36 @@ export interface CustomDashboard {
   widgets:     DashboardWidget[];
 }
 
-export const WIDGET_CATALOG: { type: WidgetType; label: string; description: string; icon: string; defaultSize: WidgetSize }[] = [
-  { type: 'severity-tiles', label: 'Severity Overview',   description: 'Critical / High / Medium / Low / IOC counts',      icon: 'bar_chart',        defaultSize: 'full'          },
-  { type: 'stat-card',      label: 'Stat Card',           description: 'Single configurable metric (e.g. Critical today)', icon: 'speed',            defaultSize: 'quarter'       },
-  { type: 'recent-alerts',  label: 'Recent Alerts Feed',  description: 'Live scrollable list of latest alerts',            icon: 'feed',             defaultSize: 'full'          },
-  { type: 'severity-bars',  label: 'Severity Bars',       description: 'Horizontal bar chart of alerts by severity',       icon: 'stacked_bar_chart',defaultSize: 'half'          },
-  { type: 'source-bars',    label: 'Source Bars',         description: 'Horizontal bar chart of alerts by source',         icon: 'devices_other',    defaultSize: 'half'          },
-  { type: 'source-pie',     label: 'Source Breakdown',    description: 'Donut chart of alerts by source',                  icon: 'donut_large',      defaultSize: 'half'          },
-  { type: 'category-pie',   label: 'Category Breakdown',  description: 'Donut chart of alerts by category',                icon: 'category',         defaultSize: 'half'          },
-  { type: 'top-hosts',      label: 'Top Hosts',           description: 'Most-alerted endpoint hostnames',                  icon: 'computer',         defaultSize: 'half'          },
-  { type: 'top-users',      label: 'Top Users',           description: 'Most-alerted user accounts',                       icon: 'person',           defaultSize: 'half'          },
-  { type: 'ioc-summary',    label: 'IOC / MISP Summary',  description: 'Count of IOC-matched alerts + recent IOC hits',    icon: 'gpp_bad',          defaultSize: 'half'          },
-  { type: 'divider',        label: 'Section Divider',     description: 'Visual separator — add a label to name the section', icon: 'horizontal_rule',  defaultSize: 'full'          },
-  { type: 'text',           label: 'Text Block',          description: 'Free-form notes, context, or commentary',            icon: 'text_fields',      defaultSize: 'full'          },
+export const WIDGET_CATALOG: { type: WidgetType; label: string; description: string; icon: string; defaultSize: WidgetSize; group: string }[] = [
+  // ── Alerts by Severity ────────────────────────────────────────────────────
+  { group: 'Alerts by Severity',  type: 'severity-tiles', label: 'Alerts by Severity — Tiles', description: 'Critical / High / Medium / Low / IOC counts as stat tiles',         icon: 'bar_chart',            defaultSize: 'full'    },
+  { group: 'Alerts by Severity',  type: 'severity-bars',  label: 'Alerts by Severity — Bars',  description: 'Horizontal bar chart comparing severity counts',                    icon: 'stacked_bar_chart',    defaultSize: 'half'    },
+  { group: 'Alerts by Severity',  type: 'stat-card',      label: 'Stat Card',                  description: 'Single metric tile (Total, Critical, High, Medium, Low, or IOC)',   icon: 'speed',                defaultSize: 'quarter' },
+
+  // ── Alerts by Tool / Source ───────────────────────────────────────────────
+  { group: 'Alerts by Tool',      type: 'tool-tiles',     label: 'Alerts by Tool — Tiles',     description: 'Stat tile per security tool (Wazuh, Sophos, Defender, Darktrace…)', icon: 'security',             defaultSize: 'full'    },
+  { group: 'Alerts by Tool',      type: 'source-bars',    label: 'Alerts by Tool — Bars',      description: 'Horizontal bar chart of alert count per connected tool/source',     icon: 'devices_other',        defaultSize: 'half'    },
+  { group: 'Alerts by Tool',      type: 'source-pie',     label: 'Alerts by Tool — Donut',     description: 'Donut chart of alert distribution across tools/sources',            icon: 'donut_large',          defaultSize: 'half'    },
+
+  // ── Alert Types / Categories ──────────────────────────────────────────────
+  { group: 'Alert Categories',    type: 'category-pie',   label: 'Alert Categories — Donut',   description: 'Donut chart of alert categories / event classes',                   icon: 'category',             defaultSize: 'half'    },
+  { group: 'Alert Categories',    type: 'top-categories', label: 'Top Alert Categories',       description: 'Ranked horizontal bars of most frequent alert types',               icon: 'format_list_numbered', defaultSize: 'half'    },
+
+  // ── Trend & Timeseries ────────────────────────────────────────────────────
+  { group: 'Trends',              type: 'alerts-timeline',  label: 'Alerts Over Time',         description: 'Line chart — alert volume over time (Total, Critical, High)',       icon: 'show_chart',           defaultSize: 'full'    },
+  { group: 'Trends',              type: 'activity-heatmap', label: 'Activity Heatmap',         description: 'Alert density grid: hour of day × day of week',                    icon: 'grid_on',              defaultSize: 'full'    },
+
+  // ── Entities ──────────────────────────────────────────────────────────────
+  { group: 'Entities',            type: 'top-hosts',      label: 'Top Hosts',                  description: 'Most-alerted endpoint hostnames',                                   icon: 'computer',             defaultSize: 'half'    },
+  { group: 'Entities',            type: 'top-users',      label: 'Top Users',                  description: 'Most-alerted user accounts',                                        icon: 'person',               defaultSize: 'half'    },
+  { group: 'Entities',            type: 'ioc-summary',    label: 'IOC / MISP Alerts',          description: 'IOC-matched alert count + recent threat indicator hits',             icon: 'gpp_bad',              defaultSize: 'half'    },
+
+  // ── Feed ──────────────────────────────────────────────────────────────────
+  { group: 'Feed',                type: 'recent-alerts',  label: 'Recent Alerts Feed',         description: 'Live scrollable list of the latest alerts',                         icon: 'feed',                 defaultSize: 'full'    },
+
+  // ── Layout ────────────────────────────────────────────────────────────────
+  { group: 'Layout',              type: 'divider',        label: 'Section Divider',            description: 'Visual separator with an optional section label',                   icon: 'horizontal_rule',      defaultSize: 'full'    },
+  { group: 'Layout',              type: 'text',           label: 'Text Block',                 description: 'Free-form notes, context, or commentary',                           icon: 'text_fields',          defaultSize: 'full'    },
 ];
 
 @Injectable({ providedIn: 'root' })
@@ -315,12 +334,23 @@ export class GatewayService {
     return this.api.get('/indexer/health');
   }
 
+  recordLogin(email?: string, displayName?: string): Observable<void> {
+    return this.api.post<void>('/audit-logs/login', {
+      email:        email       ?? '',
+      display_name: displayName ?? '',
+    });
+  }
+
   createJiraTicket(req: JiraTicketRequest): Observable<JiraTicketResult> {
     return this.api.post<JiraTicketResult>('/jira/tickets', req);
   }
 
   batchCheckJiraTickets(eventIds: string[]): Observable<{ tickets: Record<string, { key: string; url: string }> }> {
     return this.api.post('/jira/tickets/batch-check', { event_ids: eventIds });
+  }
+
+  createBatchJiraTicket(eventIds: string[]): Observable<JiraTicketResult> {
+    return this.api.post<JiraTicketResult>('/jira/tickets/batch', { event_ids: eventIds });
   }
 
   getJiraAssignees(): Observable<{ assignees: JiraAssignee[] }> {

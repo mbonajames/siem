@@ -14,6 +14,7 @@ import {
   JiraTicketRequest, JiraTicketResult, MispHit,
   VtResult,
 } from '../../core/services/gateway.service';
+import { AlertStatusService, AlertStatus } from '../../core/services/alert-status.service';
 
 type SeverityFilter = SeverityLevel | 'Critical,High' | '';
 
@@ -72,6 +73,13 @@ export class AlertsComponent implements OnInit {
     { value: 'darktrace',      label: 'Darktrace'             },
   ];
 
+  // ── Multi-select ──────────────────────────────────────────────────────────
+  selectedAlerts: Set<string> = new Set();
+  batchCreating = false;
+
+  // ── Alert status ──────────────────────────────────────────────────────────
+  alertStatuses: Map<string, AlertStatus> = new Map();
+
   // ── JIRA ──────────────────────────────────────────────────────────────────
   jiraTickets:   Map<string, { key: string; url: string }> = new Map();
   creatingTicket: Set<string> = new Set();
@@ -102,9 +110,10 @@ export class AlertsComponent implements OnInit {
   private readonly _PRIV = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.)/;
 
   constructor(
-    private gateway:  GatewayService,
-    private snackBar: MatSnackBar,
-    private route:    ActivatedRoute,
+    private gateway:       GatewayService,
+    private alertStatusSvc: AlertStatusService,
+    private snackBar:      MatSnackBar,
+    private route:         ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
@@ -116,6 +125,8 @@ export class AlertsComponent implements OnInit {
     const hours = qp.get('hours');
     if (hours) this.selectedHours = +hours;
     if (qp.get('ioc_only') === 'true') this.iocOnly = true;
+    const q = qp.get('q');
+    if (q) this.searchQuery = q;
     this.loadAlerts();
   }
 
@@ -123,6 +134,7 @@ export class AlertsComponent implements OnInit {
     this.loading = true;
     this.expandedEvent = null;
     this.investigateResult = null;
+    this.selectedAlerts.clear();
 
     const severityParam = this.selectedSeverity === 'Critical,High'
       ? (['Critical', 'High'] as SeverityLevel[])
@@ -141,6 +153,17 @@ export class AlertsComponent implements OnInit {
         this.total   = total;
         this.alerts  = events;
         this.loading = false;
+
+        // Load alert statuses in background
+        if (events.length) {
+          this.alertStatusSvc.batchGet(events.map(e => e.event_id)).subscribe({
+            next: statuses => {
+              this.alertStatuses.clear();
+              for (const s of statuses) this.alertStatuses.set(s.alert_id, s);
+            },
+            error: () => {},
+          });
+        }
 
         const highSev = events.filter(ev => ev.severity === 'Critical' || ev.severity === 'High');
         if (!highSev.length) return;
@@ -440,6 +463,57 @@ export class AlertsComponent implements OnInit {
   vtLastAnalysis(ts?: number): string {
     if (!ts) return '—';
     return new Date(ts * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  // ── Multi-select & batch Jira ─────────────────────────────────────────────
+  toggleSelect(alertId: string, event: Event): void {
+    event.stopPropagation();
+    if (this.selectedAlerts.has(alertId)) this.selectedAlerts.delete(alertId);
+    else this.selectedAlerts.add(alertId);
+  }
+
+  selectAll(): void {
+    this.alerts.forEach(a => this.selectedAlerts.add(a.event_id));
+  }
+
+  clearSelection(): void { this.selectedAlerts.clear(); }
+
+  isSelected(alertId: string): boolean { return this.selectedAlerts.has(alertId); }
+
+  get selectionCount(): number { return this.selectedAlerts.size; }
+
+  createBatchJiraTicket(): void {
+    if (!this.selectedAlerts.size || this.batchCreating) return;
+    this.batchCreating = true;
+    const ids = Array.from(this.selectedAlerts);
+    this.gateway.createBatchJiraTicket(ids).subscribe({
+      next: res => {
+        this.batchCreating = false;
+        this.clearSelection();
+        const ref = this.snackBar.open(`Batch JIRA ${res.key} created`, 'View', { duration: 8000 });
+        ref.onAction().subscribe(() => window.open(res.url, '_blank'));
+      },
+      error: err => {
+        this.batchCreating = false;
+        this.snackBar.open(
+          err?.error?.detail ?? 'Batch JIRA creation failed',
+          'Dismiss',
+          { duration: 8000, panelClass: 'snack-error' },
+        );
+      },
+    });
+  }
+
+  quickSetStatus(alertId: string, status: 'new' | 'acknowledged' | 'closed', event: Event): void {
+    event.stopPropagation();
+    this.alertStatusSvc.upsert({ alert_id: alertId, status }).subscribe({
+      next: s => { this.alertStatuses.set(alertId, s); },
+      error: () => {},
+    });
+  }
+
+  statusOf(alertId: string): string {
+    return this.alertStatuses.get(alertId)?.status ?? 'new';
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

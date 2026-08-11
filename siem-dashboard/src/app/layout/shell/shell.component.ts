@@ -9,7 +9,7 @@ import { HeaderComponent } from '../header/header.component';
   standalone: true,
   imports: [RouterOutlet, MatSidenavModule, SidebarComponent, HeaderComponent],
   templateUrl: './shell.component.html',
-  styleUrl: './shell.component.scss'
+  styleUrl: './shell.component.scss',
 })
 export class ShellComponent {
   sidenavOpen = true;

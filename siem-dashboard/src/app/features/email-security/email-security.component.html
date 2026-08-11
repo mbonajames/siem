@@ -13,6 +13,9 @@
       <button class="tab-btn" [class.active]="activeTab === 'hunt'" (click)="activeTab = 'hunt'">
         <mat-icon>manage_search</mat-icon> Advanced Hunting
       </button>
+      <button class="tab-btn" [class.active]="activeTab === 'map'" (click)="openMap()">
+        <mat-icon>hub</mat-icon> Threat Map
+      </button>
     </div>
     <button class="btn-refresh" (click)="loadAll()" title="Refresh">
       <mat-icon>refresh</mat-icon>
@@ -392,6 +395,221 @@
       <mat-icon>{{ toast.type === 'ok' ? 'check_circle' : toast.type === 'warn' ? 'warning' : 'error' }}</mat-icon>
       {{ toast.msg }}
     </div>
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB: Threat Map                                                        -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  @if (activeTab === 'map') {
+    <div class="map-wrapper">
+
+      <!-- Toolbar -->
+      <div class="map-toolbar">
+        <mat-icon class="map-icon">hub</mat-icon>
+        <span class="map-title">Email Attack Surface</span>
+        <div class="map-sep"></div>
+
+        <div class="map-filters">
+          <label class="map-filter-label">Period</label>
+          @for (d of [7, 14, 30]; track d) {
+            <button class="map-fbtn" [class.active]="mapDays === d"
+                    (click)="mapDays = d; onMapFilterChange()">{{ d }}d</button>
+          }
+        </div>
+
+        <div class="map-filters">
+          <label class="map-filter-label">Threat</label>
+          @for (t of [{v:'',l:'All'},{v:'Phishing',l:'Phishing'},{v:'Malware',l:'Malware'},{v:'BEC',l:'BEC'}]; track t.v) {
+            <button class="map-fbtn" [class.active]="mapThreat === t.v"
+                    (click)="mapThreat = t.v; onMapFilterChange()">{{ t.l }}</button>
+          }
+        </div>
+
+        <div class="map-filters">
+          <label class="map-filter-label">Delivery</label>
+          @for (d of [{v:'',l:'All'},{v:'blocked',l:'Blocked'},{v:'delivered',l:'Delivered'}]; track d.v) {
+            <button class="map-fbtn" [class.active]="mapDelivery === d.v"
+                    (click)="mapDelivery = d.v; onMapFilterChange()">{{ d.l }}</button>
+          }
+        </div>
+
+        <button class="map-refresh" (click)="loadThreatMap()" [disabled]="mapLoading" title="Refresh">
+          <mat-icon [class.spin]="mapLoading">refresh</mat-icon>
+        </button>
+      </div>
+
+      <!-- Stats bar -->
+      @if (mapStats) {
+        <div class="map-stats-bar">
+          <div class="map-stat"><span class="map-stat-val">{{ mapStats.senders }}</span><span class="map-stat-lbl">Sender Domains</span></div>
+          <div class="map-stat-sep"></div>
+          <div class="map-stat"><span class="map-stat-val">{{ mapStats.recipients }}</span><span class="map-stat-lbl">Targeted Users</span></div>
+          <div class="map-stat-sep"></div>
+          <div class="map-stat"><span class="map-stat-val">{{ mapStats.incidents }}</span><span class="map-stat-lbl">Incidents</span></div>
+          <div class="map-stat-sep"></div>
+          <div class="map-stat"><span class="map-stat-val">{{ mapStats.total }}</span><span class="map-stat-lbl">Alerts</span></div>
+          <div class="map-stat-sep"></div>
+          <div class="map-stat blocked"><span class="map-stat-val">{{ mapStats.blocked }}</span><span class="map-stat-lbl">Blocked</span></div>
+          <div class="map-stat-sep"></div>
+          <div class="map-stat delivered"><span class="map-stat-val">{{ mapStats.delivered }}</span><span class="map-stat-lbl">Delivered</span></div>
+        </div>
+      }
+
+      <!-- Loading / error / empty -->
+      @if (mapLoading) {
+        <div class="map-state"><mat-spinner diameter="36"></mat-spinner><span>Building attack map…</span></div>
+      } @else if (mapError) {
+        <div class="map-state map-state-err">
+          <mat-icon>error_outline</mat-icon><span>{{ mapError }}</span>
+          <button class="map-retry" (click)="loadThreatMap()">Retry</button>
+        </div>
+      } @else if (layoutNodes.length === 0) {
+        <div class="map-state">
+          <mat-icon>hub</mat-icon><span>No email threat data for the selected period.</span>
+        </div>
+      } @else {
+
+        <!-- Main layout: SVG graph + detail panel -->
+        <div class="map-body">
+
+          <!-- Column: labels above SVG -->
+          <div class="map-canvas-col">
+            <div class="map-col-labels">
+              <span class="map-col-label sender-label"><mat-icon>send</mat-icon> Attack Sources</span>
+              <span class="map-col-label recipient-label"><mat-icon>group</mat-icon> Targeted Recipients</span>
+            </div>
+
+            <!-- SVG canvas -->
+            <div class="map-svg-wrap" (mouseleave)="hoveredId = ''">
+            <svg class="map-svg"
+                 [attr.viewBox]="'0 0 1100 ' + mapH"
+                 preserveAspectRatio="xMidYMid meet">
+
+              <!-- Bezier edges (draw first, underneath nodes) -->
+              <g class="map-edges">
+                @for (edge of layoutEdges; track edge.from + ':' + edge.to) {
+                  <path [attr.d]="edge.d"
+                        fill="none"
+                        [attr.stroke]="edge.color"
+                        [attr.stroke-width]="edge.strokeWidth"
+                        [attr.opacity]="isEdgeHighlighted(edge) ? edge.opacity : 0.05"
+                        class="map-edge-path"
+                        [class.highlighted]="isEdgeHighlighted(edge)">
+                    <title>{{ edge.from }} → {{ edge.to }}: {{ edge.count }} email(s)</title>
+                  </path>
+                }
+              </g>
+
+              <!-- Nodes -->
+              <g class="map-nodes">
+                @for (node of layoutNodes; track node.id) {
+                  <g class="map-node"
+                     [class.hovered]="hoveredId === node.id"
+                     [class.selected]="selectedNode?.id === node.id"
+                     (mouseenter)="hoveredId = node.id"
+                     (mouseleave)="hoveredId = ''"
+                     (click)="selectNode(node)">
+
+                    <!-- Glow ring when hovered/selected -->
+                    @if (hoveredId === node.id || selectedNode?.id === node.id) {
+                      <circle [attr.cx]="node.cx" [attr.cy]="node.cy"
+                              [attr.r]="node.r + 6"
+                              [attr.fill]="node.fill" opacity="0.2"/>
+                    }
+
+                    <!-- Node circle -->
+                    <circle [attr.cx]="node.cx" [attr.cy]="node.cy"
+                            [attr.r]="node.r"
+                            [attr.fill]="node.fill"
+                            [attr.stroke]="selectedNode?.id === node.id ? '#fff' : 'none'"
+                            stroke-width="2"/>
+
+                    <!-- Count badge -->
+                    <text [attr.x]="node.cx" [attr.y]="node.cy + 4"
+                          text-anchor="middle" class="map-node-count">
+                      {{ node.count }}
+                    </text>
+
+                    <!-- Label (right of sender, left of recipient) -->
+                    @if (node.type === 'sender') {
+                      <text [attr.x]="node.cx - node.r - 6" [attr.y]="node.cy + 4"
+                            text-anchor="end" class="map-node-label sender-label-txt">
+                        {{ node.label }}
+                      </text>
+                    } @else {
+                      <text [attr.x]="node.cx + node.r + 6" [attr.y]="node.cy + 4"
+                            text-anchor="start" class="map-node-label">
+                        {{ node.label }}
+                      </text>
+                    }
+
+                    <title>{{ node.fullLabel }} — {{ node.count }} email(s) | Blocked: {{ node.blocked }} | Delivered: {{ node.delivered }}</title>
+                  </g>
+                }
+              </g>
+            </svg>
+          </div>
+          </div> <!-- /map-canvas-col -->
+
+          <!-- Detail panel (shown when a node is selected) -->
+          @if (selectedNode) {
+            <div class="map-detail">
+              <div class="map-detail-head">
+                <mat-icon>{{ selectedNode.type === 'sender' ? 'send' : 'person' }}</mat-icon>
+                <span class="map-detail-id" [title]="selectedNode.fullLabel">{{ selectedNode.fullLabel }}</span>
+                <button class="map-detail-close" (click)="selectedNode = null">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+
+              <div class="map-detail-stats">
+                <div class="map-ds"><span>{{ selectedNode.count }}</span> alerts</div>
+                @if (selectedNode.type === 'sender' && selectedNode.incident_count) {
+                  <div class="map-ds"><span>{{ selectedNode.incident_count }}</span> incidents</div>
+                }
+                <div class="map-ds blocked-ds"><span>{{ selectedNode.blocked }}</span> blocked</div>
+                <div class="map-ds delivered-ds"><span>{{ selectedNode.delivered }}</span> delivered</div>
+              </div>
+
+              @if (selectedNode.type === 'sender' && selectedNode.threat_types?.length) {
+                <div class="map-threat-chips">
+                  @for (t of selectedNode.threat_types; track t) {
+                    <span class="map-threat-chip">{{ t }}</span>
+                  }
+                </div>
+              }
+
+              @if (selectedNode.type === 'sender') {
+                <div class="map-detail-section">
+                  <div class="map-section-lbl">Targeted recipients ({{ connectedRecipients(selectedNode.id).length }})</div>
+                  @for (r of connectedRecipients(selectedNode.id); track r) {
+                    <div class="map-detail-row">
+                      <mat-icon class="map-row-icon">person</mat-icon>
+                      <span class="map-row-val" [title]="r">{{ r }}</span>
+                      <span class="map-row-count">{{ nodeConnectedEdges(selectedNode.id).find(e => e.to === r)?.count ?? 0 }}</span>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="map-detail-section">
+                  <div class="map-section-lbl">Attacked by ({{ connectedSenders(selectedNode.id).length }})</div>
+                  @for (s of connectedSenders(selectedNode.id); track s) {
+                    <div class="map-detail-row">
+                      <mat-icon class="map-row-icon">send</mat-icon>
+                      <span class="map-row-val" [title]="s">{{ s }}</span>
+                      <span class="map-row-count">{{ nodeConnectedEdges(selectedNode.id).find(e => e.from === s)?.count ?? 0 }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+        </div> <!-- /map-body -->
+
+      } <!-- /else (has nodes) -->
+
+    </div> <!-- /map-wrapper -->
   }
 
 </div>

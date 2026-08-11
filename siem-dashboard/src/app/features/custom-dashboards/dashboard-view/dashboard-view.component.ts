@@ -1,217 +1,115 @@
-import { Component, NgZone, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
-
-import {
-  GatewayService, CustomDashboard, DashboardWidget,
-  WidgetType, WidgetSize, WIDGET_CATALOG,
-} from '../../../core/services/gateway.service';
-import { WidgetComponent } from '../widget/widget.component';
+import { GrafanaService, GrafanaConfig } from '../../../core/services/grafana.service';
 
 @Component({
   selector: 'app-dashboard-view',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink,
-    MatIconModule, MatTooltipModule, MatSnackBarModule, MatProgressBarModule,
-    DragDropModule,
-    WidgetComponent,
+    CommonModule, MatIconModule, MatButtonModule,
+    MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule,
   ],
   templateUrl: './dashboard-view.component.html',
   styleUrl: './dashboard-view.component.scss',
 })
 export class DashboardViewComponent implements OnInit {
-  dashboard: CustomDashboard | null = null;
-  loading  = true;
-  saving   = false;
-  editMode = false;
-  showCatalog  = false;
-  renamingName = '';
-  globalHours  = 24;
+  config:    GrafanaConfig | null = null;
+  meta:      any = null;
+  iframeSrc: SafeResourceUrl | null = null;
+  loading    = true;
+  deleting   = false;
+  editMode   = false;
 
-  readonly catalog = WIDGET_CATALOG;
-  readonly sizeOptions: { value: WidgetSize; label: string }[] = [
-    { value: 'quarter',       label: '¼ width'    },
-    { value: 'half',          label: '½ width'    },
-    { value: 'three-quarter', label: '¾ width'    },
-    { value: 'full',          label: 'Full width' },
+  uid = '';
+
+  timeRanges = [
+    { label: '1h',  from: 'now-1h'  },
+    { label: '6h',  from: 'now-6h'  },
+    { label: '24h', from: 'now-24h' },
+    { label: '7d',  from: 'now-7d'  },
+    { label: '30d', from: 'now-30d' },
   ];
+  selectedFrom = 'now-24h';
 
   constructor(
-    private route:   ActivatedRoute,
-    private router:  Router,
-    private gateway: GatewayService,
-    private snack:   MatSnackBar,
-    private ngZone:  NgZone,
+    private route:     ActivatedRoute,
+    private router:    Router,
+    private grafana:   GrafanaService,
+    private sanitizer: DomSanitizer,
+    private snack:     MatSnackBar,
   ) {}
 
   ngOnInit(): void {
-    const id = this.route.snapshot.paramMap.get('id')!;
-    this.gateway.getDashboard(id).subscribe({
-      next:  d  => { this.dashboard = d; this.loading = false; },
-      error: err => {
-        this.loading = false;
-        this.snack.open(err?.error?.detail ?? 'Failed to load dashboard', 'Dismiss', { duration: 6000 });
+    this.uid      = this.route.snapshot.paramMap.get('id') ?? '';
+    this.editMode = this.route.snapshot.queryParamMap.get('edit') === '1';
+    this.grafana.getConfig().subscribe({
+      next: cfg => {
+        this.config = cfg;
+        if (!cfg.configured) { this.loading = false; return; }
+        this.loadMeta();
+      },
+      error: () => { this.loading = false; },
+    });
+  }
+
+  loadMeta(): void {
+    this.grafana.getDashboard(this.uid).subscribe({
+      next:  d  => { this.meta = d; this.loading = false; this.buildIframe(); },
+      error: () => { this.loading = false; this.buildIframe(); },
+    });
+  }
+
+  buildIframe(): void {
+    if (!this.config?.public_url) return;
+    const slug = this.meta?.meta?.slug ?? this.uid;
+    const base = `${this.config.public_url}/d/${this.uid}/${slug}?orgId=1`;
+    const url  = this.editMode
+      ? `${base}&from=${this.selectedFrom}&to=now`           // full toolbar — Grafana edit mode
+      : `${base}&kiosk=1&theme=dark&from=${this.selectedFrom}&to=now&refresh=1m`;
+    this.iframeSrc = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+  }
+
+  toggleEditMode(): void {
+    this.editMode = !this.editMode;
+    this.buildIframe();
+  }
+
+  changeTime(from: string): void {
+    this.selectedFrom = from;
+    this.buildIframe();
+  }
+
+  delete(): void {
+    if (!confirm(`Delete dashboard "${this.dashTitle}"? This cannot be undone.`)) return;
+    this.deleting = true;
+    this.grafana.deleteDashboard(this.uid).subscribe({
+      next: () => {
+        this.snack.open('Dashboard deleted', '', { duration: 3000 });
         this.router.navigate(['/my-dashboards']);
       },
-    });
-  }
-
-  get isOwner(): boolean {
-    return !!this.dashboard; // simplified — backend enforces real ownership
-  }
-
-  // ── Edit mode ──────────────────────────────────────────────────────────────
-  toggleEdit(): void {
-    if (this.editMode) {
-      this.save();
-    } else {
-      this.renamingName = this.dashboard?.name ?? '';
-      this.editMode = true;
-    }
-  }
-
-  cancelEdit(): void {
-    this.editMode    = false;
-    this.showCatalog = false;
-  }
-
-  save(): void {
-    if (!this.dashboard) return;
-    this.saving = true;
-    const updates: any = {
-      widgets: this.dashboard.widgets,
-    };
-    if (this.renamingName.trim() && this.renamingName !== this.dashboard.name) {
-      updates.name = this.renamingName.trim();
-    }
-    this.gateway.saveDashboard(this.dashboard.id, updates).subscribe({
-      next: d => {
-        this.dashboard   = d;
-        this.editMode    = false;
-        this.showCatalog = false;
-        this.saving      = false;
-        this.snack.open('Dashboard saved', '', { duration: 2500 });
-      },
       error: err => {
-        this.saving = false;
-        this.snack.open(err?.error?.detail ?? 'Save failed', 'Dismiss', { duration: 6000 });
+        this.deleting = false;
+        this.snack.open(err?.error?.detail ?? 'Delete failed', 'Dismiss', { duration: 6000 });
       },
     });
   }
 
-  // ── Sharing ────────────────────────────────────────────────────────────────
-  toggleShare(): void {
-    if (!this.dashboard) return;
-    const newState = !this.dashboard.shared;
-    this.gateway.shareDashboard(this.dashboard.id, newState).subscribe({
-      next: d => {
-        this.dashboard = d;
-        this.snack.open(newState ? 'Dashboard is now shared with everyone' : 'Dashboard is now private', '', { duration: 3000 });
-      },
-      error: err => this.snack.open(err?.error?.detail ?? 'Share failed', 'Dismiss', { duration: 6000 }),
-    });
+  get dashTitle(): string {
+    return this.meta?.dashboard?.title ?? this.uid;
   }
 
-  // ── Drag & drop ────────────────────────────────────────────────────────────
-  onDrop(event: CdkDragDrop<DashboardWidget[]>): void {
-    if (!this.dashboard || !this.editMode) return;
-    moveItemInArray(this.dashboard.widgets, event.previousIndex, event.currentIndex);
+  openInGrafana(): void {
+    if (!this.config?.public_url || !this.meta) return;
+    const slug = this.meta?.meta?.slug ?? this.uid;
+    window.open(`${this.config.public_url}/d/${this.uid}/${slug}`, '_blank');
   }
 
-  // ── Widget management ──────────────────────────────────────────────────────
-  addWidget(type: WidgetType): void {
-    if (!this.dashboard) return;
-    const meta = this.catalog.find(c => c.type === type)!;
-    const widget: DashboardWidget = {
-      id:     crypto.randomUUID(),
-      type,
-      title:  meta.label,
-      size:   meta.defaultSize,
-      config: { hours: this.globalHours, limit: 20 },
-    };
-    this.dashboard.widgets = [...this.dashboard.widgets, widget];
-  }
-
-  removeWidget(id: string): void {
-    if (!this.dashboard) return;
-    this.dashboard.widgets = this.dashboard.widgets.filter(w => w.id !== id);
-  }
-
-  setWidgetSize(widget: DashboardWidget, size: WidgetSize): void {
-    widget.size = size;
-  }
-
-  widgetSizeClass(widget: DashboardWidget): string {
-    if (widget.type === 'divider') return 'w-full w-auto';
-    const sizeMap: Record<string, string> = {
-      quarter: 'w-quarter', half: 'w-half', 'three-quarter': 'w-three-quarter', full: 'w-full',
-    };
-    const base = sizeMap[widget.size] ?? 'w-half';
-    return widget.type === 'text' ? base + ' w-auto' : base;
-  }
-
-  widgetHeight(widget: DashboardWidget): string {
-    if (widget.type === 'divider' || widget.type === 'text') return 'auto';
-    if (widget.config?.height) return `${widget.config.height}px`;
-    const defaults: Partial<Record<WidgetType, string>> = {
-      'severity-tiles': '160px',
-      'stat-card':      '160px',
-      'severity-bars':  '230px',
-      'source-bars':    '230px',
-      'top-hosts':      '230px',
-      'top-users':      '230px',
-      'source-pie':     '280px',
-      'category-pie':   '280px',
-      'recent-alerts':  '380px',
-      'ioc-summary':    '300px',
-    };
-    return defaults[widget.type] ?? '300px';
-  }
-
-  // ── Resize by drag ──────────────────────────────────────────────────────────
-  startResize(event: MouseEvent, widget: DashboardWidget, wrapEl: HTMLElement): void {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const startY = event.clientY;
-    const startH = wrapEl.offsetHeight;
-    let currentH = startH;
-
-    const onMove = (e: MouseEvent) => {
-      currentH = Math.max(100, startH + (e.clientY - startY));
-      wrapEl.style.height = `${currentH}px`;
-    };
-
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      // Sync final height back into Angular's zone so it's included on next Save
-      this.ngZone.run(() => {
-        widget.config = { ...widget.config, height: currentH };
-      });
-    };
-
-    // Run listeners outside Angular's zone for smooth drag performance
-    this.ngZone.runOutsideAngular(() => {
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
-  }
-
-  exportPdf(): void {
-    const cleanup = () => {
-      document.body.classList.remove('siem-print-dashboard');
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    document.body.classList.add('siem-print-dashboard');
-    window.print();
-  }
+  goBack(): void { this.router.navigate(['/my-dashboards']); }
 }

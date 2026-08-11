@@ -178,6 +178,154 @@
           </div>
         }
 
+        <!-- ── alerts-timeline ──────────────────────────────────────────────── -->
+        @if (widget.type === 'alerts-timeline') {
+          <div class="wgt-ts-wrap" style="position:relative">
+            <!-- Legend -->
+            <div class="wgt-ts-legend">
+              @for (s of tsSeries; track s.key) {
+                <span class="wgt-ts-leg-item">
+                  <svg width="14" height="2" style="vertical-align:middle;display:inline-block;margin-right:3px">
+                    <line x1="0" y1="1" x2="14" y2="1" [attr.stroke]="s.color" stroke-width="2"/>
+                  </svg>
+                  <span class="wgt-ts-leg-lbl">{{ s.label }}</span>
+                </span>
+              }
+            </div>
+            <!-- SVG Chart -->
+            <svg [attr.viewBox]="'0 0 ' + TS_W + ' ' + TS_H" class="wgt-ts-svg"
+                 (mousemove)="onTsMove($event)" (mouseleave)="onTsLeave()">
+              @for (tick of tsYTicks(); track tick.y) {
+                <line [attr.x1]="TS_PL" [attr.x2]="TS_W - TS_PR"
+                      [attr.y1]="tick.y" [attr.y2]="tick.y" class="wgt-ts-grid"/>
+                <text [attr.x]="TS_PL - 3" [attr.y]="tick.y + 4"
+                      text-anchor="end" class="wgt-ts-axlbl">{{ tick.label }}</text>
+              }
+              @for (xl of tsXLabels(); track xl.x) {
+                <text [attr.x]="xl.x" [attr.y]="TS_H - 4"
+                      text-anchor="middle" class="wgt-ts-axlbl">{{ xl.label }}</text>
+              }
+              @for (s of tsSeries; track s.key) {
+                <path [attr.d]="s.areaPath" [attr.fill]="s.color" fill-opacity="0.10" stroke="none"/>
+              }
+              @for (s of tsSeries; track s.key) {
+                <path [attr.d]="s.linePath" [attr.stroke]="s.color"
+                      stroke-width="2" fill="none"
+                      stroke-linejoin="round" stroke-linecap="round"/>
+              }
+              @if (tsCursorActive) {
+                <line [attr.x1]="tsCursorX" [attr.x2]="tsCursorX"
+                      [attr.y1]="TS_PT" [attr.y2]="TS_H - TS_PB"
+                      class="wgt-ts-crosshair"/>
+                @for (s of tsSeries; track s.key) {
+                  <circle [attr.cx]="tsCursorX" [attr.cy]="tsSnapY(s)" r="4"
+                          [attr.fill]="s.color" stroke="var(--siem-surface)" stroke-width="2"/>
+                }
+              }
+            </svg>
+            @if (tsTip.visible) {
+              <div class="wgt-viz-tip" [style.left.px]="tsTip.left" [style.top.px]="tsTip.top">
+                <div class="wgt-viz-tip-hdr">{{ tsTip.label }}</div>
+                @for (row of tsTip.rows; track row.label) {
+                  <div class="wgt-viz-tip-row">
+                    <svg width="12" height="2" style="vertical-align:middle;flex-shrink:0;display:inline-block">
+                      <line x1="0" y1="1" x2="12" y2="1" [attr.stroke]="row.color" stroke-width="2"/>
+                    </svg>
+                    <span class="wgt-viz-tip-name">{{ row.label }}</span>
+                    <strong class="wgt-viz-tip-val">{{ row.val }}</strong>
+                  </div>
+                }
+              </div>
+            }
+            @if (!tsSeries.length) {
+              <div class="wgt-empty"><mat-icon>show_chart</mat-icon> No alert data</div>
+            }
+          </div>
+        }
+
+        <!-- ── activity-heatmap ──────────────────────────────────────────────── -->
+        @if (widget.type === 'activity-heatmap') {
+          <div class="wgt-heat-outer" style="position:relative">
+            <div class="wgt-heat-wrap">
+              <div class="wgt-heat-hdr-row">
+                <div class="wgt-heat-corner"></div>
+                @for (day of HEAT_DAYS; track day) {
+                  <div class="wgt-heat-day-lbl">{{ day }}</div>
+                }
+              </div>
+              @for (h of HEAT_HOURS; track h) {
+                <div class="wgt-heat-row">
+                  <div class="wgt-heat-hr-lbl">{{ h % 6 === 0 ? (h.toString().padStart(2,'0') + ':00') : '' }}</div>
+                  @for (d of [0,1,2,3,4,5,6]; track d) {
+                    @let cell = heatCells[d * 24 + h];
+                    <div class="wgt-heat-cell"
+                         [style.background]="cell?.count ? 'rgba(42,120,214,' + (0.08 + cell.norm * 0.85) + ')' : 'transparent'"
+                         (mouseenter)="onHeatEnter($event, cell)"
+                         (mouseleave)="onHeatLeave()">
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            <div class="wgt-heat-leg-row">
+              <span class="wgt-heat-leg-lbl">0</span>
+              <div class="wgt-heat-grad"></div>
+              <span class="wgt-heat-leg-lbl">{{ heatMax }}</span>
+            </div>
+            @if (heatTip.visible) {
+              <div class="wgt-viz-tip" [style.left.px]="heatTip.left" [style.top.px]="heatTip.top">
+                <div class="wgt-viz-tip-hdr">{{ heatTip.day }} {{ heatTip.hour.toString().padStart(2,'0') }}:00</div>
+                <div class="wgt-viz-tip-row">
+                  <span class="wgt-viz-tip-name">Alerts</span>
+                  <strong class="wgt-viz-tip-val">{{ heatTip.count }}</strong>
+                </div>
+              </div>
+            }
+            @if (!heatCells.length) {
+              <div class="wgt-empty"><mat-icon>grid_on</mat-icon> No data</div>
+            }
+          </div>
+        }
+
+        <!-- ── top-categories ───────────────────────────────────────────────── -->
+        @if (widget.type === 'top-categories') {
+          @if (!topCatBars.length) {
+            <div class="wgt-empty"><mat-icon>format_list_numbered</mat-icon> No data</div>
+          } @else {
+            <div class="wgt-bar-list">
+              @for (bar of topCatBars; let i = $index; track bar.label) {
+                <div class="wgt-bar-row">
+                  <span class="wgt-cat-rank">{{ i + 1 }}</span>
+                  <span class="wgt-bar-label" [title]="bar.label">{{ bar.label }}</span>
+                  <div class="wgt-bar-track">
+                    <div class="wgt-bar-fill" [style.width.%]="bar.pct" [style.background]="bar.color"></div>
+                  </div>
+                  <span class="wgt-bar-count" [style.color]="bar.color">{{ bar.val }}</span>
+                </div>
+              }
+            </div>
+          }
+        }
+
+        <!-- ── tool-tiles ──────────────────────────────────────────────────── -->
+        @if (widget.type === 'tool-tiles') {
+          @if (!toolTiles.length) {
+            <div class="wgt-empty"><mat-icon>security</mat-icon> No tool data</div>
+          } @else {
+            <div class="wgt-tool-tiles">
+              @for (tile of toolTiles; track tile.key) {
+                <a class="wgt-tool-tile" routerLink="/alerts"
+                   [queryParams]="{source: tile.key, hours: hours}">
+                  <mat-icon class="wgt-tool-icon" [style.color]="tile.color">{{ tile.icon }}</mat-icon>
+                  <div class="wgt-tile-lbl">{{ tile.label }}</div>
+                  <div class="wgt-tile-val" [style.color]="tile.color">{{ tile.count }}</div>
+                  <div class="wgt-tool-sub">alerts</div>
+                </a>
+              }
+            </div>
+          }
+        }
+
         <!-- ── text block ───────────────────────────────────────────────────── -->
         @if (widget.type === 'text') {
           @if (editMode) {

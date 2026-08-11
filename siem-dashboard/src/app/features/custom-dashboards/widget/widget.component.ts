@@ -13,8 +13,11 @@ import {
   AlertStats, UnifiedEvent,
 } from '../../../core/services/gateway.service';
 
-interface BarItem { label: string; val: number; pct: number; color: string; }
-interface PieSlice { dash: number; offset: number; color: string; label: string; val: number; pct: number; }
+interface BarItem    { label: string; val: number; pct: number; color: string; }
+interface PieSlice   { dash: number; offset: number; color: string; label: string; val: number; pct: number; }
+interface WgtTimePoint { label: string; total: number; bySev: Record<string, number>; }
+interface WgtSeries  { key: string; label: string; color: string; linePath: string; areaPath: string; }
+interface WgtHeatCell{ day: number; hour: number; count: number; norm: number; }
 
 const PIE_C = +(2 * Math.PI * 40).toFixed(4);
 const PIE_COLORS = ['#F46A1F','#58a6ff','#3fb950','#7F77DD','#d29922','#da3633','#79c0ff','#ff9a5c'];
@@ -61,6 +64,31 @@ export class WidgetComponent implements OnInit, OnChanges {
   metricVal     = 0;
   metricLabel   = '';
   metricColor   = '#F46A1F';
+
+  // ── Grafana-style widgets ─────────────────────────────────────────────────
+  readonly TS_W = 540; readonly TS_H = 150;
+  readonly TS_PL = 40; readonly TS_PT = 8; readonly TS_PR = 8; readonly TS_PB = 26;
+  timePoints:  WgtTimePoint[] = [];
+  tsSeries:    WgtSeries[]    = [];
+  tsBucketXs:  number[]       = [];
+  tsMaxY = 1;
+  tsCursorActive = false;
+  tsCursorX = 0;
+  tsCursorSnapIdx = -1;
+  tsTip: { visible: boolean; left: number; top: number; label: string; rows: { label: string; val: number; color: string }[] }
+       = { visible: false, left: 0, top: 0, label: '', rows: [] };
+
+  heatCells: WgtHeatCell[] = [];
+  heatMax = 1;
+  heatTip: { visible: boolean; left: number; top: number; day: string; hour: number; count: number }
+          = { visible: false, left: 0, top: 0, day: '', hour: 0, count: 0 };
+  readonly HEAT_DAYS  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  readonly HEAT_HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+  topCatBars: BarItem[] = [];
+
+  // tool-tiles
+  toolTiles: { label: string; key: string; count: number; color: string; icon: string }[] = [];
 
   readonly PIE_C = PIE_C;
 
@@ -139,7 +167,197 @@ export class WidgetComponent implements OnInit, OnChanges {
       return;
     }
 
+    if (type === 'tool-tiles') {
+      this.gateway.getStats(this.hours).pipe(catchError(() => of(null))).subscribe(s => {
+        this.stats = s;
+        if (s) this.buildToolTiles(s);
+        this.loading = false;
+      });
+      return;
+    }
+
+    if (type === 'alerts-timeline' || type === 'activity-heatmap' || type === 'top-categories') {
+      this.gateway.getAlerts({ limit: 200, hours: this.hours }).pipe(catchError(() => of(null))).subscribe(p => {
+        const evs = p?.events ?? [];
+        if (type === 'alerts-timeline')   this.buildTimeline(evs);
+        if (type === 'activity-heatmap')  this.buildHeatmap(evs);
+        if (type === 'top-categories')    this.buildTopCategories(evs);
+        this.loading = false;
+      });
+      return;
+    }
+
     this.loading = false;
+  }
+
+  // ── Alerts timeline ───────────────────────────────────────────────────────
+
+  private buildTimeline(events: UnifiedEvent[]): void {
+    const N   = this.hours <= 24 ? 24 : this.hours <= 168 ? 7 : 30;
+    const ms  = this.hours <= 24 ? 3_600_000 : 86_400_000;
+    const now = new Date();
+
+    const buckets: WgtTimePoint[] = Array.from({ length: N }, (_, ii) => {
+      const d = new Date(now.getTime() - (N - 1 - ii) * ms);
+      const label = ms === 3_600_000
+        ? d.getHours().toString().padStart(2, '0') + ':00'
+        : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      return { label, total: 0, bySev: { Critical: 0, High: 0, Medium: 0, Low: 0 } };
+    });
+
+    events.forEach(ev => {
+      const age  = now.getTime() - new Date(ev.time).getTime();
+      const slot = N - 1 - Math.floor(age / ms);
+      if (slot >= 0 && slot < N) {
+        buckets[slot].total++;
+        const s = ev.severity as string;
+        if (s in buckets[slot].bySev) buckets[slot].bySev[s]++;
+      }
+    });
+
+    this.timePoints = buckets;
+    this.tsMaxY     = Math.max(...buckets.map(b => b.total), 1);
+
+    const pw = this.TS_W - this.TS_PL - this.TS_PR;
+    const ph = this.TS_H - this.TS_PT - this.TS_PB;
+    const bot = this.TS_PT + ph;
+    const xAt = (i: number) => this.TS_PL + (N <= 1 ? pw / 2 : (i / (N - 1)) * pw);
+    const yAt = (v: number) => this.TS_PT + (1 - v / this.tsMaxY) * ph;
+
+    this.tsBucketXs = buckets.map((_, i) => xAt(i));
+
+    const mkSeries = (key: string, label: string, color: string, vals: number[]): WgtSeries => {
+      if (!vals.some(v => v > 0)) return { key, label, color, linePath: '', areaPath: '' };
+      const pts      = vals.map((v, i) => `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`);
+      const linePath = 'M' + pts.join('L');
+      const areaPath = `M${xAt(0).toFixed(1)},${bot}` + pts.map(p => 'L' + p).join('') + `L${xAt(N-1).toFixed(1)},${bot}Z`;
+      return { key, label, color, linePath, areaPath };
+    };
+
+    this.tsSeries = [
+      mkSeries('Total',    'Total',    '#2a78d6', buckets.map(b => b.total)),
+      mkSeries('Critical', 'Critical', '#d03b3b', buckets.map(b => b.bySev['Critical'])),
+      mkSeries('High',     'High',     '#eda100', buckets.map(b => b.bySev['High'])),
+    ].filter(s => s.linePath !== '');
+  }
+
+  // ── Heatmap ───────────────────────────────────────────────────────────────
+
+  private buildHeatmap(events: UnifiedEvent[]): void {
+    const grid: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    events.forEach(ev => {
+      const d   = new Date(ev.time);
+      const dow = (d.getDay() + 6) % 7;
+      grid[dow][d.getHours()]++;
+    });
+    this.heatMax   = Math.max(1, ...grid.flat());
+    this.heatCells = [];
+    for (let day = 0; day < 7; day++)
+      for (let hour = 0; hour < 24; hour++)
+        this.heatCells.push({ day, hour, count: grid[day][hour], norm: grid[day][hour] / this.heatMax });
+  }
+
+  // ── Top categories ────────────────────────────────────────────────────────
+
+  private buildTopCategories(events: UnifiedEvent[]): void {
+    const counts: Record<string, number> = {};
+    events.forEach(e => {
+      const k = (e.event_class || e.category || '').trim();
+      if (k && k !== 'unknown') counts[k] = (counts[k] ?? 0) + 1;
+    });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const max    = sorted[0]?.[1] ?? 1;
+    this.topCatBars = sorted.map(([label, val]) => ({
+      label, val, pct: Math.round(val / max * 100), color: '#2a78d6',
+    }));
+  }
+
+  // ── Timeline interaction ──────────────────────────────────────────────────
+
+  onTsMove(ev: MouseEvent): void {
+    if (!this.timePoints.length) return;
+    const rect  = (ev.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const svgX  = (ev.clientX - rect.left) * (this.TS_W / rect.width);
+    let nearest = 0, minDist = Infinity;
+    this.tsBucketXs.forEach((bx, i) => {
+      const d = Math.abs(bx - svgX);
+      if (d < minDist) { minDist = d; nearest = i; }
+    });
+    const pt = this.timePoints[nearest];
+    if (!pt) return;
+    this.tsCursorActive  = true;
+    this.tsCursorX       = this.tsBucketXs[nearest];
+    this.tsCursorSnapIdx = nearest;
+    this.tsTip = {
+      visible: true, left: ev.clientX + 14, top: ev.clientY - 72, label: pt.label,
+      rows: [
+        { label: 'Total',    val: pt.total,                  color: '#2a78d6' },
+        { label: 'Critical', val: pt.bySev['Critical'] ?? 0, color: '#d03b3b' },
+        { label: 'High',     val: pt.bySev['High']     ?? 0, color: '#eda100' },
+        { label: 'Medium',   val: pt.bySev['Medium']   ?? 0, color: '#86b6ef' },
+        { label: 'Low',      val: pt.bySev['Low']      ?? 0, color: '#3fb950' },
+      ],
+    };
+  }
+
+  onTsLeave(): void {
+    this.tsCursorActive = false;
+    this.tsTip = { ...this.tsTip, visible: false };
+  }
+
+  tsYTicks(): { y: number; label: string }[] {
+    const ph = this.TS_H - this.TS_PT - this.TS_PB;
+    return [0, 1, 2, 3, 4].map(i => {
+      const v = Math.round((i / 4) * this.tsMaxY);
+      return { y: this.TS_PT + (1 - i / 4) * ph, label: v >= 1000 ? (v / 1000).toFixed(1) + 'k' : '' + v };
+    });
+  }
+
+  tsXLabels(): { label: string; x: number }[] {
+    const N = this.timePoints.length;
+    if (!N) return [];
+    const skip = N <= 7 ? 1 : N <= 24 ? 4 : 5;
+    return this.timePoints
+      .map((p, i) => ({ label: p.label, x: this.tsBucketXs[i] }))
+      .filter((_, i) => i % skip === 0 || i === N - 1);
+  }
+
+  tsSnapY(s: WgtSeries): number {
+    const idx = this.tsCursorSnapIdx;
+    if (idx < 0 || !this.timePoints[idx]) return this.TS_PT;
+    const bySev = this.timePoints[idx].bySev;
+    const v = s.key === 'Total' ? this.timePoints[idx].total
+            : s.key === 'Critical' ? (bySev['Critical'] ?? 0)
+            : s.key === 'High'     ? (bySev['High']     ?? 0)
+            : 0;
+    return this.TS_PT + (1 - v / this.tsMaxY) * (this.TS_H - this.TS_PT - this.TS_PB);
+  }
+
+  // ── Heatmap interaction ───────────────────────────────────────────────────
+
+  onHeatEnter(ev: MouseEvent, cell: WgtHeatCell): void {
+    this.heatTip = {
+      visible: true, left: ev.clientX + 14, top: ev.clientY - 52,
+      day: this.HEAT_DAYS[cell.day], hour: cell.hour, count: cell.count,
+    };
+  }
+
+  onHeatLeave(): void { this.heatTip = { ...this.heatTip, visible: false }; }
+
+  private buildToolTiles(s: AlertStats): void {
+    const TOOL_META = [
+      { key: 'wazuh',          label: 'Wazuh',     color: '#F46A1F', icon: 'security'      },
+      { key: 'sophos-central', label: 'Sophos',    color: '#0072C6', icon: 'shield'        },
+      { key: 'ms-graph',       label: 'Defender',  color: '#00B4F0', icon: 'cloud'         },
+      { key: 'darktrace',      label: 'Darktrace', color: '#7F77DD', icon: 'psychology'    },
+    ];
+    const known = new Set(TOOL_META.map(t => t.key));
+    const tiles: { key: string; label: string; color: string; icon: string; count: number }[] =
+      TOOL_META.map(m => ({ ...m, count: s.by_source[m.key] ?? 0 }));
+    Object.entries(s.by_source).forEach(([key, count]) => {
+      if (!known.has(key)) tiles.push({ key, label: key, color: '#8b949e', icon: 'devices_other', count });
+    });
+    this.toolTiles = tiles.sort((a, b) => b.count - a.count);
   }
 
   private buildSevBars(s: AlertStats): void {

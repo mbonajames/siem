@@ -1,32 +1,71 @@
 <header class="app-header">
+
+  <!-- ── Left: menu toggle + page title ──────────────────────────────────── -->
   <div class="header-left">
-    <button mat-icon-button (click)="menuToggle.emit()" matTooltip="Toggle navigation">
+    <button mat-icon-button class="menu-btn" (click)="menuToggle.emit()"
+            matTooltip="Toggle navigation" matTooltipShowDelay="600">
       <mat-icon>menu</mat-icon>
     </button>
-    <span class="header-title">Hope International</span>
+
+    <div class="page-meta">
+      <mat-icon class="page-icon">{{ currentPageIcon }}</mat-icon>
+      <span class="page-title">{{ currentPageTitle }}</span>
+    </div>
   </div>
 
+  <!-- ── Centre: Org switcher ────────────────────────────────────────────── -->
+  <button class="org-switcher" [matMenuTriggerFor]="orgMenu"
+          matTooltip="Switch organization context" matTooltipShowDelay="600">
+    <mat-icon class="org-sw-icon">business</mat-icon>
+    <span class="org-sw-name">{{ orgService.current.shortName }}</span>
+    <mat-icon class="org-sw-caret">expand_more</mat-icon>
+  </button>
+
+  <mat-menu #orgMenu="matMenu" class="org-menu">
+    @for (org of orgService.orgs; track org.id) {
+      <button mat-menu-item class="org-menu-item"
+              [class.selected]="orgService.orgId === org.id"
+              (click)="orgService.setOrg(org.id)">
+        <mat-icon>{{ orgService.orgId === org.id ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+        <span>{{ org.name }}</span>
+      </button>
+    }
+  </mat-menu>
+
+  <!-- ── Right: actions + user ───────────────────────────────────────────── -->
   <div class="header-right">
-    <button mat-icon-button
-            [matTooltip]="notificationCount ? notificationCount + ' critical/high alerts (last 24h)' : 'No critical alerts'"
-            [matBadge]="notificationCount"
+
+    <!-- Notifications -->
+    <button mat-icon-button class="header-icon-btn"
+            [matTooltip]="notificationCount
+              ? notificationCount + ' critical/high alerts (last 24h)'
+              : 'No critical alerts'"
+            [matBadge]="notificationCount || null"
             [matBadgeHidden]="notificationCount === 0"
             matBadgeColor="warn"
+            matBadgeSize="small"
             (click)="goToNotifications()">
-      <mat-icon>notifications</mat-icon>
+      <mat-icon [class.text-severity-high]="notificationCount > 0">
+        {{ notificationCount > 0 ? 'notifications_active' : 'notifications' }}
+      </mat-icon>
     </button>
 
-    <button mat-icon-button [matMenuTriggerFor]="userMenu" class="user-avatar-btn" matTooltip="Account">
+    <!-- User menu -->
+    <button mat-icon-button [matMenuTriggerFor]="userMenu"
+            class="user-avatar-btn" matTooltip="Account" matTooltipShowDelay="600">
       <div class="user-avatar">{{ initials }}</div>
     </button>
 
-    <mat-menu #userMenu="matMenu" xPosition="before">
+    <mat-menu #userMenu="matMenu" xPosition="before" class="user-menu">
       <div class="user-menu-header" mat-menu-item disabled>
-        <div class="user-menu-name">{{ displayName }}</div>
-        <div class="user-menu-email">{{ email }}</div>
-        @if (roleBadge) {
-          <span class="role-badge" [class.admin]="isAdmin">{{ roleBadge }}</span>
-        }
+        <div class="user-avatar-lg">{{ initials }}</div>
+        <div class="user-menu-info">
+          <div class="user-menu-name">{{ displayName }}</div>
+          <div class="user-menu-email">{{ email }}</div>
+          @if (roleBadge) {
+            <span class="role-badge" [class.admin]="isAdmin">{{ roleBadge }}</span>
+          }
+        </div>
       </div>
       <mat-divider />
       <button mat-menu-item (click)="logout()">
@@ -34,5 +73,6 @@
         <span>Sign out</span>
       </button>
     </mat-menu>
+
   </div>
 </header>

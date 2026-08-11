@@ -18,10 +18,6 @@ export class IdentityService {
     return this.api.post(`/identity/users/${userId}/revoke-sessions/`, {});
   }
 
-  resetPassword(userId: string): Observable<any> {
-    return this.api.post(`/identity/users/${userId}/reset-password/`, {});
-  }
-
   dismissRisk(userId: string): Observable<any> {
     return this.api.post(`/identity/users/${userId}/dismiss-risk/`, {});
   }

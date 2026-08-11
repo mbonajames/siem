@@ -295,6 +295,24 @@ export interface VtResult {
   error?: string;
 }
 
+export interface ThreatMapNode {
+  id: string;
+  type: 'sender' | 'recipient';
+  count: number;
+  threat_types?: string[];
+  blocked: number;
+  delivered: number;
+  severity?: string;
+  incident_count?: number;
+}
+export interface ThreatMapEdge { from: string; to: string; count: number; }
+export interface ThreatMapStats { senders: number; recipients: number; total: number; blocked: number; delivered: number; incidents: number; }
+export interface ThreatMapData {
+  nodes: ThreatMapNode[];
+  edges: ThreatMapEdge[];
+  stats: ThreatMapStats;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EmailSecurityService {
   constructor(private api: ApiService) {}
@@ -336,6 +354,14 @@ export class EmailSecurityService {
 
   getIncidents(days = 7): Observable<{ incidents: DefenderIncident[]; total: number }> {
     return this.api.get('/incidents/', { days });
+  }
+
+  getThreatMap(params: { days?: number; threat_type?: string; delivery?: string } = {}): Observable<ThreatMapData> {
+    const p: Record<string, any> = {};
+    if (params.days)         p['days']         = params.days;
+    if (params.threat_type)  p['threat_type']  = params.threat_type;
+    if (params.delivery)     p['delivery']     = params.delivery;
+    return this.api.get<ThreatMapData>('/email/threat-map/', p);
   }
 
   vtLookup(type: 'ip' | 'domain' | 'hash' | 'url', value: string): Observable<VtResult> {

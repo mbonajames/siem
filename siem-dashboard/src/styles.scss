@@ -1,118 +1,167 @@
+// ── Angular Material (must be first — SCSS @use rules cannot be preceded) ──────
 @use '@angular/material' as mat;
-
 @include mat.core();
+
+// ── Tailwind CSS ───────────────────────────────────────────────────────────────
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 $siem-dark-theme: mat.define-theme((
   color: (
     theme-type: dark,
-    primary: mat.$azure-palette,
-    tertiary: mat.$cyan-palette,
+    primary:    mat.$azure-palette,
+    tertiary:   mat.$cyan-palette,
+  ),
+  typography: (
+    brand-family:  'Inter, Roboto, sans-serif',
+    plain-family:  'Inter, Roboto, sans-serif',
+    bold-weight:   700,
+    medium-weight: 500,
+    regular-weight: 400,
   ),
   density: (scale: -1)
 ));
 
 :root {
   @include mat.all-component-themes($siem-dark-theme);
-  --siem-bg: #0d1117;
-  --siem-surface: #161b22;
+
+  // ── Surfaces ──────────────────────────────────────────────────────────────
+  --siem-bg:               #0d1117;
+  --siem-surface:          #161b22;
   --siem-surface-elevated: #1c2128;
-  --siem-border: #30363d;
-  --siem-text-primary: #e6edf3;
+  --siem-sidebar:          #0e1419;
+  --siem-border:           #30363d;
+  --siem-border-subtle:    #21262d;
+
+  // ── Text ──────────────────────────────────────────────────────────────────
+  --siem-text-primary:   #e6edf3;
   --siem-text-secondary: #8b949e;
+  --siem-text-faint:     #6e7681;
+
+  // ── Severity ──────────────────────────────────────────────────────────────
   --siem-critical: #da3633;
-  --siem-high: #f85149;
-  --siem-medium: #d29922;
-  --siem-low: #3fb950;
-  --siem-info: #58a6ff;
-  --siem-accent: #1f6feb;
-  --hope-orange: #F46A1F;
+  --siem-high:     #f85149;
+  --siem-medium:   #d29922;
+  --siem-low:      #3fb950;
+  --siem-info:     #58a6ff;
+  --siem-accent:   #1f6feb;
+
+  // ── Brand ─────────────────────────────────────────────────────────────────
+  --hope-orange:      #F46A1F;
   --hope-orange-dark: #C45114;
-  --hope-purple: #7F77DD;
+  --hope-purple:      #7F77DD;
+
+  // ── Shadows ───────────────────────────────────────────────────────────────
+  --shadow-card:  0 1px 3px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.04) inset;
+  --shadow-panel: 0 4px 20px rgba(0,0,0,.55);
+  --shadow-modal: 0 8px 40px rgba(0,0,0,.7);
 }
 
-* { box-sizing: border-box; }
+// ── Base ──────────────────────────────────────────────────────────────────────
+*, *::before, *::after { box-sizing: border-box; }
 
 html, body {
   height: 100%;
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-family: 'Inter', Roboto, 'Helvetica Neue', sans-serif;
   background-color: var(--siem-bg);
   color: var(--siem-text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
 }
 
-.severity-critical { color: var(--siem-critical) !important; }
-.severity-high { color: var(--siem-high) !important; }
-.severity-medium { color: var(--siem-medium) !important; }
-.severity-low { color: var(--siem-low) !important; }
-.severity-info { color: var(--siem-info) !important; }
+// ── Scrollbar ─────────────────────────────────────────────────────────────────
+::-webkit-scrollbar            { width: 6px; height: 6px; }
+::-webkit-scrollbar-track      { background: transparent; }
+::-webkit-scrollbar-thumb      { background: #30363d; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
+// ── Severity utilities ────────────────────────────────────────────────────────
+.severity-critical { color: var(--siem-critical) !important; }
+.severity-high     { color: var(--siem-high)     !important; }
+.severity-medium   { color: var(--siem-medium)   !important; }
+.severity-low      { color: var(--siem-low)      !important; }
+.severity-info     { color: var(--siem-info)     !important; }
+
+// ── Badge system ──────────────────────────────────────────────────────────────
 .badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 12px;
+  border-radius: 20px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
 
-  &.critical { background: rgba(218,54,51,0.15); color: var(--siem-critical); border: 1px solid rgba(218,54,51,0.3); }
-  &.high { background: rgba(248,81,73,0.15); color: var(--siem-high); border: 1px solid rgba(248,81,73,0.3); }
-  &.medium { background: rgba(210,153,34,0.15); color: var(--siem-medium); border: 1px solid rgba(210,153,34,0.3); }
-  &.low { background: rgba(63,185,80,0.15); color: var(--siem-low); border: 1px solid rgba(63,185,80,0.3); }
-  &.info { background: rgba(88,166,255,0.15); color: var(--siem-info); border: 1px solid rgba(88,166,255,0.3); }
+  mat-icon { font-size: 13px; width: 13px; height: 13px; }
 
-  &.status-active { background: rgba(63,185,80,0.15); color: var(--siem-low); border: 1px solid rgba(63,185,80,0.3); }
-  &.status-disconnected { background: rgba(218,54,51,0.15); color: var(--siem-critical); border: 1px solid rgba(218,54,51,0.3); }
-  &.status-isolated { background: rgba(210,153,34,0.15); color: var(--siem-medium); border: 1px solid rgba(210,153,34,0.3); }
-  &.status-open { background: rgba(88,166,255,0.15); color: var(--siem-info); border: 1px solid rgba(88,166,255,0.3); }
-  &.status-in-progress { background: rgba(210,153,34,0.15); color: var(--siem-medium); border: 1px solid rgba(210,153,34,0.3); }
-  &.status-done { background: rgba(63,185,80,0.15); color: var(--siem-low); border: 1px solid rgba(63,185,80,0.3); }
+  &.critical { background: rgba(218,54,51,.12); color: var(--siem-critical); border: 1px solid rgba(218,54,51,.25); }
+  &.high     { background: rgba(248,81,73,.12); color: var(--siem-high);     border: 1px solid rgba(248,81,73,.25); }
+  &.medium   { background: rgba(210,153,34,.12); color: var(--siem-medium);  border: 1px solid rgba(210,153,34,.25); }
+  &.low      { background: rgba(63,185,80,.12); color: var(--siem-low);      border: 1px solid rgba(63,185,80,.25); }
+  &.info     { background: rgba(88,166,255,.12); color: var(--siem-info);    border: 1px solid rgba(88,166,255,.25); }
+
+  &.status-active       { background: rgba(63,185,80,.12);  color: var(--siem-low);      border: 1px solid rgba(63,185,80,.25); }
+  &.status-disconnected { background: rgba(218,54,51,.12);  color: var(--siem-critical); border: 1px solid rgba(218,54,51,.25); }
+  &.status-isolated     { background: rgba(210,153,34,.12); color: var(--siem-medium);   border: 1px solid rgba(210,153,34,.25); }
+  &.status-open         { background: rgba(88,166,255,.12); color: var(--siem-info);     border: 1px solid rgba(88,166,255,.25); }
+  &.status-in-progress  { background: rgba(210,153,34,.12); color: var(--siem-medium);   border: 1px solid rgba(210,153,34,.25); }
+  &.status-done         { background: rgba(63,185,80,.12);  color: var(--siem-low);      border: 1px solid rgba(63,185,80,.25); }
 }
 
+// ── Material card override ────────────────────────────────────────────────────
 .mat-mdc-card {
   background-color: var(--siem-surface) !important;
   border: 1px solid var(--siem-border) !important;
+  box-shadow: var(--shadow-card) !important;
 }
 
+// ── Page header ───────────────────────────────────────────────────────────────
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 
   h1 {
-    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
     font-weight: 600;
     margin: 0;
     color: var(--siem-text-primary);
+    letter-spacing: -0.2px;
+
+    mat-icon { font-size: 20px; width: 20px; height: 20px; color: var(--siem-info); }
   }
 }
 
+// ── Data table container ──────────────────────────────────────────────────────
 .data-table-container {
   background: var(--siem-surface);
   border: 1px solid var(--siem-border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
+  box-shadow: var(--shadow-card);
 
-  .mat-mdc-table {
-    background: transparent;
-  }
-
-  .mat-mdc-header-row {
-    background: var(--siem-surface-elevated);
-  }
-
-  .mat-mdc-row:hover {
-    background: var(--siem-surface-elevated);
-    cursor: pointer;
-  }
+  .mat-mdc-table         { background: transparent; }
+  .mat-mdc-header-row    { background: var(--siem-surface-elevated); height: 38px; }
+  .mat-mdc-row           { height: 40px; }
+  .mat-mdc-header-cell   { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--siem-text-secondary); padding: 0 12px; }
+  .mat-mdc-cell          { font-size: 12.5px; padding: 0 12px; }
+  .mat-mdc-row:hover     { background: var(--siem-surface-elevated); cursor: pointer; }
 }
 
+// ── Filter bar ────────────────────────────────────────────────────────────────
 .filter-bar {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   margin-bottom: 16px;
   flex-wrap: wrap;
@@ -123,28 +172,16 @@ html, body {
 // ── Error snackbar ────────────────────────────────────────────────────────────
 .snack-error .mdc-snackbar__surface {
   background: #2a0f0f !important;
-  border: 1px solid rgba(218, 54, 51, .5) !important;
-  color: #f85149 !important;
+  border: 1px solid rgba(218,54,51,.4) !important;
 }
+.snack-error .mat-mdc-snack-bar-label { color: #f85149 !important; }
+.snack-error .mat-mdc-button           { color: #8b949e !important; }
 
-.snack-error .mat-mdc-snack-bar-label {
-  color: #f85149 !important;
-}
-
-.snack-error .mat-mdc-button {
-  color: #8b949e !important;
-}
-
-// ── Dashboard PDF export ───────────────────────────────────────────────────────
-// Applied only when exportPdf() adds this class — hides all shell chrome so the
-// browser print dialog renders only the dashboard widget grid.
+// ── Dashboard PDF export ──────────────────────────────────────────────────────
 @media print {
   body.siem-print-dashboard {
-    // Hide navigation and header
-    mat-sidenav,
-    app-header { display: none !important; }
+    mat-sidenav, app-header { display: none !important; }
 
-    // Reset Material sidenav container layout
     mat-sidenav-container,
     mat-sidenav-content {
       display: block !important;
@@ -156,7 +193,6 @@ html, body {
       width: 100% !important;
     }
 
-    // Remove shell padding/margin from main content
     .main-content {
       padding: 0 !important;
       margin: 0 !important;

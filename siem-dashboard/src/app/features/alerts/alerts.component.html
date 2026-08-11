@@ -72,12 +72,18 @@
 
     <!-- Header -->
     <div class="alert-hdr">
+      <div class="col-chk">
+        <input type="checkbox" class="row-checkbox"
+          [checked]="selectedAlerts.size === alerts.length && alerts.length > 0"
+          (change)="selectedAlerts.size === alerts.length ? clearSelection() : selectAll()">
+      </div>
       <div class="col-time">Time</div>
       <div class="col-sev">Severity</div>
       <div class="col-src">Source</div>
       <div class="col-cat">Category</div>
       <div class="col-desc">Summary</div>
       <div class="col-ent">Entities</div>
+      <div class="col-status">Status</div>
       <div class="col-jira">Ticket</div>
       <div class="col-act"></div>
     </div>
@@ -95,7 +101,13 @@
       <div class="alert-row"
            [class.row-crit]="row.severity === 'Critical'"
            [class.row-expanded]="expandedEvent === row"
+           [class.row-selected]="isSelected(row.event_id)"
            (click)="toggleRow(row)">
+
+        <div class="col-chk" (click)="toggleSelect(row.event_id, $event)">
+          <input type="checkbox" class="row-checkbox" [checked]="isSelected(row.event_id)"
+            (change)="toggleSelect(row.event_id, $event)">
+        </div>
 
         <div class="col-time">{{ row.time | date:'MM/dd HH:mm:ss' }}</div>
 
@@ -130,6 +142,23 @@
             @if (row.host)   { <span class="ent-chip host-chip"  [matTooltip]="'Host: ' + row.host"><mat-icon>computer</mat-icon>{{ row.host }}</span> }
             @if (row.src_ip) { <span class="ent-chip ip-chip"    [matTooltip]="'IP: ' + row.src_ip"><mat-icon>router</mat-icon>{{ row.src_ip }}</span> }
           </div>
+        </div>
+
+        <!-- Status column -->
+        <div class="col-status" (click)="$event.stopPropagation()">
+          @switch (statusOf(row.event_id)) {
+            @case ('acknowledged') {
+              <span class="status-chip status-ack" matTooltip="Click to close"
+                (click)="quickSetStatus(row.event_id, 'closed', $event)">Ack</span>
+            }
+            @case ('closed') {
+              <span class="status-chip status-closed">Closed</span>
+            }
+            @default {
+              <span class="status-chip status-new" matTooltip="Click to acknowledge"
+                (click)="quickSetStatus(row.event_id, 'acknowledged', $event)">New</span>
+            }
+          }
         </div>
 
         <!-- JIRA ticket column -->
@@ -632,3 +661,20 @@
   </mat-paginator>
 
 </div>
+
+<!-- Floating batch action bar -->
+@if (selectionCount > 0) {
+  <div class="batch-action-bar">
+    <span class="batch-count">{{ selectionCount }} alert{{ selectionCount === 1 ? '' : 's' }} selected</span>
+    <div class="batch-actions">
+      <button mat-flat-button class="batch-btn" (click)="createBatchJiraTicket()" [disabled]="batchCreating">
+        @if (batchCreating) { <mat-icon class="spin-sm">sync</mat-icon> }
+        @else { <mat-icon>confirmation_number</mat-icon> }
+        Create Jira Ticket
+      </button>
+      <button mat-stroked-button class="batch-clear" (click)="clearSelection()">
+        <mat-icon>close</mat-icon> Clear
+      </button>
+    </div>
+  </div>
+}

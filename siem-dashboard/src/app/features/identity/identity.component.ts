@@ -15,12 +15,10 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatChipsModule } from '@angular/material/chips';
 import { forkJoin } from 'rxjs';
 import { IdentityService } from '../../core/services/identity.service';
 import { StatCardComponent } from '../../shared/components/stat-card/stat-card.component';
-import { ResetPasswordDialogComponent } from './reset-password-dialog.component';
 
 @Component({
   selector: 'app-identity',
@@ -29,8 +27,7 @@ import { ResetPasswordDialogComponent } from './reset-password-dialog.component'
     CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule,
     MatCardModule, MatProgressBarModule, MatTabsModule, MatMenuModule, MatTooltipModule,
-    MatSnackBarModule, MatDialogModule, MatChipsModule, StatCardComponent,
-    ResetPasswordDialogComponent,
+    MatSnackBarModule, MatChipsModule, StatCardComponent,
   ],
   templateUrl: './identity.component.html',
   styleUrl: './identity.component.scss'
@@ -63,7 +60,6 @@ export class IdentityComponent implements OnInit, AfterViewInit {
   constructor(
     private identity: IdentityService,
     private snackBar: MatSnackBar,
-    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -116,19 +112,6 @@ export class IdentityComponent implements OnInit, AfterViewInit {
     if (!confirm(`Revoke all sessions for ${user.userDisplayName}? They will be signed out immediately.`)) return;
     this.identity.revokeSessions(user.id).subscribe({
       next: () => this.snackBar.open(`Sessions revoked for ${user.userDisplayName}`, 'OK', { duration: 4000 }),
-      error: (err) => this.snackBar.open(`Failed: ${err.error?.error ?? err.message}`, 'Close', { duration: 5000 }),
-    });
-  }
-
-  resetPassword(user: any): void {
-    if (!confirm(`Force password reset for ${user.userDisplayName}? A temporary password will be generated.`)) return;
-    this.identity.resetPassword(user.id).subscribe({
-      next: (res: any) => {
-        this.dialog.open(ResetPasswordDialogComponent, {
-          data: { user: user.userDisplayName, password: res.temporaryPassword },
-          width: '420px',
-        });
-      },
       error: (err) => this.snackBar.open(`Failed: ${err.error?.error ?? err.message}`, 'Close', { duration: 5000 }),
     });
   }

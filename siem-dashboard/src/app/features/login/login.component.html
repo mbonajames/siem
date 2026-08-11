@@ -1,15 +1,29 @@
 <div class="login-page">
+
+  <!-- Background grid decoration -->
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow-orange" aria-hidden="true"></div>
+  <div class="bg-glow-purple" aria-hidden="true"></div>
+
+  <!-- Card -->
   <div class="login-card">
+
+    <!-- Top gradient accent bar -->
+    <div class="card-accent" aria-hidden="true"></div>
+
+    <!-- Logo + identity -->
     <div class="logo-area">
       <img class="hope-logo"
            src="https://www.hopeinternational.org/assets/images/brand/HOPE_H_yellowgray_web.svg"
            alt="Hope International" />
-      <h1>Hope International</h1>
-      <p class="org-name">SecOps</p>
+      <h1 class="org-title">Hope International</h1>
+      <p class="org-subtitle">Security Operations Center</p>
     </div>
 
-    <div class="divider"></div>
+    <!-- Divider -->
+    <div class="card-divider"></div>
 
+    <!-- Sign-in -->
     <button mat-flat-button class="sign-in-btn" (click)="signIn()">
       <svg class="ms-logo" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <rect width="10" height="10" fill="#f25022"/>
@@ -20,9 +34,15 @@
       Sign in with Microsoft
     </button>
 
+    <!-- Footer note -->
     <p class="footer-note">
-      Use your <strong>Hope International</strong> Microsoft account.<br>
-      Unauthorized access is prohibited.
+      Use your <strong>Hope International</strong> Microsoft 365 account.<br>
+      Unauthorized access is prohibited and monitored.
     </p>
+
   </div>
+
+  <!-- Bottom wordmark -->
+  <p class="page-wordmark">Hope·Armor SIEM · Powered by Darktrace, Sophos &amp; Defender</p>
+
 </div>

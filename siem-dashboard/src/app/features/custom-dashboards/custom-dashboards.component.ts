@@ -1,95 +1,170 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { GatewayService, CustomDashboard } from '../../core/services/gateway.service';
+import { GrafanaService, GrafanaDashboard, GrafanaFolder, GrafanaConfig } from '../../core/services/grafana.service';
 
 @Component({
   selector: 'app-custom-dashboards',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink,
-    MatIconModule, MatTooltipModule, MatProgressBarModule, MatSnackBarModule,
+    CommonModule, FormsModule,
+    MatIconModule, MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule,
   ],
   templateUrl: './custom-dashboards.component.html',
   styleUrl: './custom-dashboards.component.scss',
 })
 export class CustomDashboardsComponent implements OnInit {
-  dashboards: CustomDashboard[] = [];
-  loading      = true;
-  creating     = false;
-  newName      = '';
-  newDesc      = '';
-  showCreateForm = false;
+  config:     GrafanaConfig | null = null;
+  dashboards: GrafanaDashboard[]   = [];
+  folderList: GrafanaFolder[]      = [];
+  loading     = true;
+  searchQuery = '';
+  private searchTimer: any;
+
+  // ── Datasource provisioning ───────────────────────────────────────────────
+  provisioning     = false;
+  provisionResults: any[] | null = null;
+
+  // ── Create form state ─────────────────────────────────────────────────────
+  showCreate  = false;
+  newTitle    = '';
+  newFolderUid = '';
+  creating    = false;
+  createError = '';
 
   constructor(
-    private gateway: GatewayService,
+    private grafana: GrafanaService,
     private router:  Router,
     private snack:   MatSnackBar,
   ) {}
 
-  ngOnInit(): void { this.load(); }
+  ngOnInit(): void {
+    this.grafana.getConfig().subscribe({
+      next:  cfg => { this.config = cfg; if (cfg.configured) { this.load(); this.loadFolders(); } else { this.loading = false; } },
+      error: ()  => { this.loading = false; },
+    });
+  }
 
-  load(): void {
+  load(q?: string): void {
     this.loading = true;
-    this.gateway.listDashboards().subscribe({
-      next:  ({ dashboards }) => { this.dashboards = dashboards; this.loading = false; },
+    this.grafana.listDashboards(q).subscribe({
+      next:  d  => { this.dashboards = d; this.loading = false; },
       error: () => { this.loading = false; },
     });
   }
 
-  create(): void {
-    if (!this.newName.trim()) return;
-    this.creating = true;
-    this.gateway.createDashboard(this.newName.trim(), this.newDesc.trim()).subscribe({
-      next: d => {
-        this.creating      = false;
-        this.showCreateForm = false;
-        this.newName       = '';
-        this.newDesc       = '';
-        this.router.navigate(['/my-dashboards', d.id]);
+  loadFolders(): void {
+    this.grafana.listFolders().subscribe({
+      next:  f  => { this.folderList = f; },
+      error: () => {},
+    });
+  }
+
+  onSearch(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => this.load(this.searchQuery.trim() || undefined), 350);
+  }
+
+  open(d: GrafanaDashboard): void {
+    this.router.navigate(['/my-dashboards', d.uid]);
+  }
+
+  folders(): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const d of this.dashboards) {
+      const f = d.folderTitle ?? 'General';
+      if (!seen.has(f)) { seen.add(f); out.push(f); }
+    }
+    return out;
+  }
+
+  byFolder(folder: string): GrafanaDashboard[] {
+    return this.dashboards.filter(d => (d.folderTitle ?? 'General') === folder);
+  }
+
+  openInGrafana(d: GrafanaDashboard, e: Event): void {
+    e.stopPropagation();
+    if (this.config?.public_url) {
+      window.open(`${this.config.public_url}${d.url}`, '_blank');
+    }
+  }
+
+  // ── Datasource provisioning ───────────────────────────────────────────────
+  provisionDatasources(): void {
+    this.provisioning     = true;
+    this.provisionResults = null;
+    this.grafana.provisionDatasources().subscribe({
+      next: res => {
+        this.provisioning     = false;
+        this.provisionResults = res.results;
+        this.snack.open('Data sources provisioned — ready to use in dashboards', '', { duration: 4000 });
       },
       error: err => {
-        this.creating = false;
-        this.snack.open(err?.error?.detail ?? 'Create failed', 'Dismiss', { duration: 6000 });
+        this.provisioning     = false;
+        this.provisionResults = err?.error?.detail ?? null;
+        this.snack.open(
+          'Provisioning failed — check the result details',
+          'Dismiss', { duration: 6000 },
+        );
       },
     });
   }
 
-  delete(d: CustomDashboard, e: Event): void {
-    e.stopPropagation();
-    if (!confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
-    this.gateway.deleteDashboard(d.id).subscribe({
-      next:  () => this.dashboards = this.dashboards.filter(x => x.id !== d.id),
-      error: err => this.snack.open(err?.error?.detail ?? 'Delete failed', 'Dismiss', { duration: 6000 }),
+  // ── Create dashboard ──────────────────────────────────────────────────────
+  toggleCreate(): void {
+    this.showCreate = !this.showCreate;
+    if (this.showCreate) {
+      this.newTitle    = '';
+      this.newFolderUid = '';
+      this.createError = '';
+    }
+  }
+
+  cancelCreate(): void {
+    this.showCreate  = false;
+    this.createError = '';
+  }
+
+  confirmCreate(): void {
+    const title = this.newTitle.trim();
+    if (!title) { this.createError = 'Dashboard title is required.'; return; }
+
+    this.creating    = true;
+    this.createError = '';
+
+    const payload: any = {
+      dashboard: {
+        id: null, uid: null,
+        title,
+        tags: [],
+        timezone: 'browser',
+        schemaVersion: 39,
+        panels: [],
+        refresh: '1m',
+      },
+      overwrite: false,
+      message: 'Created via Hope-Armor SIEM',
+    };
+    if (this.newFolderUid) { payload.folderUid = this.newFolderUid; }
+
+    this.grafana.saveDashboard(payload).subscribe({
+      next: result => {
+        this.creating   = false;
+        this.showCreate = false;
+        this.snack.open(`Dashboard "${title}" created`, '', { duration: 3000 });
+        // Open in edit mode so the user can add panels right away
+        this.router.navigate(['/my-dashboards', result.uid], { queryParams: { edit: '1' } });
+      },
+      error: err => {
+        this.creating    = false;
+        this.createError = err?.error?.detail ?? 'Failed to create dashboard. Check API Gateway logs.';
+      },
     });
-  }
-
-  myDashboards(): CustomDashboard[] { return this.dashboards.filter(d => !d.shared || this.isOwner(d)); }
-  sharedByOthers(): CustomDashboard[] { return this.dashboards.filter(d => d.shared && !this.isOwner(d)); }
-
-  isOwner(d: CustomDashboard): boolean {
-    // We don't expose the current user's ID from the JWT on the frontend,
-    // so we rely on the back end to return only this user's owned + shared ones.
-    // We tag owner by showing an edit button only if the dashboard appears in "mine".
-    return true; // simplified — ownership enforced by backend on save/delete
-  }
-
-  widgetSummary(d: CustomDashboard): string {
-    const c = d.widgets?.length ?? 0;
-    return c === 0 ? 'Empty' : `${c} widget${c === 1 ? '' : 's'}`;
-  }
-
-  timeAgo(ts: string): string {
-    const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
-    if (m < 1)  return 'just now';
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
   }
 }

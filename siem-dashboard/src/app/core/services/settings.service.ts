@@ -2,36 +2,43 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
-export interface IntegrationField {
-  label: string;
-  type: 'text' | 'password' | 'url';
-  value: string;
-  configured: boolean;
+export interface AuditLog {
+  id:          string;
+  timestamp:   string;
+  user:        string;
+  action:      string;
+  resource:    string;
+  outcome:     'success' | 'failure' | 'warning';
+  ip_address?: string;
+  details?:    string;
 }
 
-export interface IntegrationConfig {
-  label: string;
-  description: string;
-  icon: string;
-  configured: boolean;
-  fields: Record<string, IntegrationField>;
+export interface AuditLogsPage {
+  total: number;
+  logs:  AuditLog[];
 }
-
-export type SettingsResponse = Record<string, IntegrationConfig>;
 
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
   constructor(private api: ApiService) {}
 
-  getSettings(): Observable<SettingsResponse> {
-    return this.api.get<SettingsResponse>('/settings/');
+  getAuditLogs(params: {
+    limit?:   number;
+    hours?:   number;
+    outcome?: string;
+  } = {}): Observable<AuditLogsPage> {
+    const p: Record<string, any> = {};
+    if (params.limit   != null) p['limit']   = params.limit;
+    if (params.hours   != null) p['hours']   = params.hours;
+    if (params.outcome)         p['outcome'] = params.outcome;
+    return this.api.get<AuditLogsPage>('/audit-logs', p);
   }
 
-  saveIntegration(integration: string, fields: Record<string, string>): Observable<any> {
-    return this.api.patch('/settings/', { integration, fields });
+  deleteAuditLog(id: string): Observable<void> {
+    return this.api.delete<void>(`/audit-logs/${encodeURIComponent(id)}`);
   }
 
-  testConnection(integration: string): Observable<{ status: 'connected' | 'error'; message: string }> {
-    return this.api.post(`/settings/${integration}/test/`, {});
+  clearAuditLogs(): Observable<{ deleted: number }> {
+    return this.api.delete<{ deleted: number }>('/audit-logs');
   }
 }

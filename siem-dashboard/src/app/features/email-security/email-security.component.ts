@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { of } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
 import {
@@ -15,7 +16,18 @@ import {
   DefenderIncident,
   DefenderIncidentAlert,
   IncidentEvidence,
+  ThreatMapData,
+  ThreatMapNode,
 } from '../../core/services/email-security.service';
+
+// ── Threat map layout types ───────────────────────────────────────────────────
+interface LayoutNode extends ThreatMapNode {
+  cx: number; cy: number; r: number; fill: string; label: string; fullLabel: string;
+}
+interface LayoutEdge {
+  from: string; to: string; count: number;
+  d: string; strokeWidth: number; opacity: number; color: string;
+}
 
 interface Toast { msg: string; type: 'ok' | 'err' | 'warn'; }
 
@@ -30,7 +42,7 @@ const DEFAULT_HUNT = `EmailEvents
 @Component({
   selector: 'app-email-security',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatIconModule, MatExpansionModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatExpansionModule, MatProgressSpinnerModule],
   templateUrl: './email-security.component.html',
   styleUrl: './email-security.component.scss',
 })
@@ -43,7 +55,21 @@ export class EmailSecurityComponent implements OnInit {
   // UI state
   loading = false;
   detailLoading = false;
-  activeTab: 'list' | 'incidents' | 'hunt' = 'list';
+  activeTab: 'list' | 'incidents' | 'hunt' | 'map' = 'list';
+
+  // ── Threat map ──────────────────────────────────────────────────────────────
+  mapLoading    = false;
+  mapError      = '';
+  mapLoaded     = false;
+  mapDays       = 7;
+  mapThreat     = '';
+  mapDelivery   = '';
+  mapStats: ThreatMapData['stats'] | null = null;
+  layoutNodes:  LayoutNode[]  = [];
+  layoutEdges:  LayoutEdge[]  = [];
+  mapH          = 600;
+  hoveredId     = '';
+  selectedNode: LayoutNode | null = null;
   apiError = '';
   permissionDenied = false;
 
@@ -413,5 +439,139 @@ export class EmailSecurityComponent implements OnInit {
     if (!r) return '';
     if ((r as any)._vtError) return (r as any)._notFound ? '–' : '!';
     return `${r.stats?.malicious ?? 0}/${this.vtTotal(r)}`;
+  }
+
+  // ── Threat map ──────────────────────────────────────────────────────────────
+
+  openMap(): void {
+    this.activeTab = 'map';
+    if (!this.mapLoaded) this.loadThreatMap();
+  }
+
+  loadThreatMap(): void {
+    this.mapLoading = true;
+    this.mapError   = '';
+    this.svc.getThreatMap({
+      days:        this.mapDays,
+      threat_type: this.mapThreat   || undefined,
+      delivery:    this.mapDelivery || undefined,
+    }).pipe(catchError(e => {
+      this.mapError = e?.error?.detail || e?.message || 'Failed to load threat map';
+      return of(null);
+    })).subscribe(data => {
+      this.mapLoading = false;
+      if (data) {
+        this.mapStats  = data.stats;
+        this.mapLoaded = true;
+        this._buildLayout(data);
+      }
+    });
+  }
+
+  onMapFilterChange(): void {
+    this.mapLoaded = false;
+    this.loadThreatMap();
+  }
+
+  private _threatColor(types: string[]): string {
+    const t = (types || []).join(' ').toLowerCase();
+    if (t.includes('phish'))     return '#f97316';
+    if (t.includes('malware') || t.includes('ransomware')) return '#ef4444';
+    if (t.includes('compromise') || t.includes('bec'))     return '#a855f7';
+    if (t.includes('spam'))      return '#94a3b8';
+    return '#ef4444';
+  }
+
+  private _buildLayout(data: ThreatMapData): void {
+    const CANVAS_W = 1100;
+    const LEFT_X   = 280;
+    const RIGHT_X  = 820;
+    const MIN_R    = 8;
+    const MAX_R    = 22;
+    const ROW_H    = 42;
+    const PAD_TOP  = 50;
+
+    const senders    = data.nodes.filter(n => n.type === 'sender');
+    const recipients = data.nodes.filter(n => n.type === 'recipient');
+    const maxRows    = Math.max(senders.length, recipients.length, 1);
+    const canvasH    = Math.max(360, PAD_TOP + maxRows * ROW_H + 40);
+    this.mapH = canvasH;
+
+    const maxCount = Math.max(...data.nodes.map(n => n.count), 1);
+    const scale    = (v: number) => MIN_R + (v / maxCount) * (MAX_R - MIN_R);
+    const truncate = (s: string, n: number) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+
+    const yFor = (i: number, total: number) =>
+      total === 1 ? canvasH / 2
+                  : PAD_TOP + i * ((canvasH - PAD_TOP - 40) / (total - 1));
+
+    const senderLayouts: LayoutNode[] = senders.map((n, i) => ({
+      ...n, threat_types: n.threat_types ?? [],
+      cx: LEFT_X, cy: yFor(i, senders.length),
+      r: scale(n.count),
+      fill: this._threatColor(n.threat_types ?? []),
+      label: truncate(n.id, 32),
+      fullLabel: n.id,
+    }));
+
+    const recipientLayouts: LayoutNode[] = recipients.map((n, i) => ({
+      ...n, threat_types: [],
+      cx: RIGHT_X, cy: yFor(i, recipients.length),
+      r: scale(n.count),
+      fill: '#3b82f6',
+      label: truncate(n.id, 34),
+      fullLabel: n.id,
+    }));
+
+    this.layoutNodes = [...senderLayouts, ...recipientLayouts];
+    const nodeMap = new Map(this.layoutNodes.map(n => [n.id, n]));
+
+    const maxEdge = Math.max(...data.edges.map(e => e.count), 1);
+
+    this.layoutEdges = data.edges.map(e => {
+      const fn = nodeMap.get(e.from);
+      const tn = nodeMap.get(e.to);
+      if (!fn || !tn) return null!;
+      const x1  = fn.cx + fn.r;
+      const y1  = fn.cy;
+      const x2  = tn.cx - tn.r;
+      const y2  = tn.cy;
+      const mid = (x1 + x2) / 2;
+      return {
+        from: e.from, to: e.to, count: e.count,
+        d:           `M ${x1} ${y1} C ${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`,
+        strokeWidth: 0.8 + (e.count / maxEdge) * 3.5,
+        opacity:     0.25 + (e.count / maxEdge) * 0.55,
+        color:       fn.fill,
+      };
+    }).filter(Boolean);
+  }
+
+  isEdgeHighlighted(edge: LayoutEdge): boolean {
+    if (!this.hoveredId && !this.selectedNode) return true;
+    const active = this.hoveredId || this.selectedNode?.id || '';
+    return edge.from === active || edge.to === active;
+  }
+
+  nodeConnectedEdges(nodeId: string): LayoutEdge[] {
+    return this.layoutEdges.filter(e => e.from === nodeId || e.to === nodeId);
+  }
+
+  selectNode(node: LayoutNode): void {
+    this.selectedNode = this.selectedNode?.id === node.id ? null : node;
+  }
+
+  connectedRecipients(senderDomain: string): string[] {
+    return this.layoutEdges
+      .filter(e => e.from === senderDomain)
+      .map(e => e.to)
+      .sort();
+  }
+
+  connectedSenders(recipientEmail: string): string[] {
+    return this.layoutEdges
+      .filter(e => e.to === recipientEmail)
+      .map(e => e.from)
+      .sort();
   }
 }

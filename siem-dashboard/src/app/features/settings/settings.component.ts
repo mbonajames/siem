@@ -1,128 +1,185 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MatCardModule } from '@angular/material/card';
-import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatDividerModule } from '@angular/material/divider';
-import { SettingsService, IntegrationConfig } from '../../core/services/settings.service';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { SettingsService, AuditLog } from '../../core/services/settings.service';
+import { AuthService } from '../../core/services/auth.service';
+import { NotificationsService, NotificationConfig } from '../../core/services/notifications.service';
 
-interface IntegrationState {
-  key: string;
-  config: IntegrationConfig;
-  formData: Record<string, string>;
-  showSecrets: Record<string, boolean>;
-  testStatus: 'idle' | 'testing' | 'connected' | 'error';
-  testMessage: string;
-  saving: boolean;
-  expanded: boolean;
-}
+const ACTION_ICONS: Record<string, string> = {
+  login:                       'login',
+  create_dashboard:            'dashboard_customize',
+  delete_dashboard:            'delete',
+  share_dashboard:             'public',
+  create_jira_ticket:          'confirmation_number',
+  save_integration_settings:   'settings',
+  upload_vulnerability_scan:   'upload_file',
+  delete_vulnerability_scan:   'delete_sweep',
+  endpoint_action:             'device_hub',
+  defender_ingest:             'security_update',
+};
 
 @Component({
   selector: 'app-settings',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, MatCardModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule,
-    MatTooltipModule, MatExpansionModule, MatDividerModule,
+    CommonModule, FormsModule, MatIconModule, MatButtonModule,
+    MatProgressSpinnerModule, MatTooltipModule, MatSnackBarModule,
   ],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
 })
 export class SettingsComponent implements OnInit {
-  integrations: IntegrationState[] = [];
-  loading = true;
+  readonly auth = inject(AuthService);
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  notifConfig: NotificationConfig = { enabled: false, min_severity: 'High', poll_interval_secs: 120 };
+  notifLoading    = false;
+  notifSaving     = false;
+  notifTesting    = false;
+  notifTestResult = '';
+  showWebhook     = false;
+
+  auditLogs:   AuditLog[] = [];
+  auditTotal   = 0;
+  auditLoading = true;
+  auditError   = '';
+  auditHours   = 24;
+  auditOutcome = '';
+  auditSearch  = '';
 
   constructor(
-    private settingsService: SettingsService,
-    private snackBar: MatSnackBar,
+    private settingsService:   SettingsService,
+    private notifSvc:          NotificationsService,
+    private snackBar:          MatSnackBar,
   ) {}
 
   ngOnInit(): void {
-    this.settingsService.getSettings().subscribe({
-      next: (data) => {
-        this.integrations = Object.entries(data).map(([key, config]) => ({
-          key,
-          config,
-          formData: Object.fromEntries(
-            Object.entries(config.fields).map(([k, f]) => [k, f.type === 'password' ? '' : f.value])
-          ),
-          showSecrets: {},
-          testStatus: 'idle' as const,
-          testMessage: '',
-          saving: false,
-          expanded: false,
-        }));
-        this.loading = false;
-      },
-      error: () => { this.loading = false; },
+    this.loadAuditLogs();
+    this.loadNotifConfig();
+  }
+
+  loadNotifConfig(): void {
+    this.notifLoading = true;
+    this.notifSvc.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
+      if (cfg) this.notifConfig = cfg;
+      this.notifLoading = false;
     });
   }
 
-  fieldKeys(state: IntegrationState): string[] {
-    return Object.keys(state.config.fields);
-  }
-
-  getInputType(state: IntegrationState, key: string): string {
-    const field = state.config.fields[key];
-    if (field.type === 'password') {
-      return state.showSecrets[key] ? 'text' : 'password';
-    }
-    return 'text';
-  }
-
-  toggleSecret(state: IntegrationState, key: string): void {
-    state.showSecrets[key] = !state.showSecrets[key];
-  }
-
-  save(state: IntegrationState): void {
-    state.saving = true;
-    this.settingsService.saveIntegration(state.key, state.formData).subscribe({
-      next: () => {
-        state.saving = false;
-        // Refresh the configured status from backend
-        this.settingsService.getSettings().subscribe(data => {
-          const updated = data[state.key];
-          if (updated) {
-            state.config = updated;
-            // Reset password fields after save
-            Object.entries(updated.fields).forEach(([k, f]) => {
-              if (f.type === 'password') state.formData[k] = '';
-            });
-          }
-        });
-        this.snackBar.open(`${state.config.label} credentials saved`, 'OK', { duration: 3000 });
-        state.testStatus = 'idle';
-      },
-      error: (err) => {
-        state.saving = false;
-        this.snackBar.open(`Save failed: ${err.error?.error ?? err.message}`, 'Close', { duration: 5000 });
-      },
+  saveNotifConfig(): void {
+    this.notifSaving = true;
+    const payload = { ...this.notifConfig };
+    if (!payload.teams_webhook_url) delete payload.teams_webhook_url;
+    this.notifSvc.saveConfig(payload).pipe(catchError(() => of(null))).subscribe(res => {
+      this.notifSaving = false;
+      this.snackBar.open(res ? 'Notification settings saved' : 'Save failed', '', { duration: 3000 });
     });
   }
 
-  testConnection(state: IntegrationState): void {
-    state.testStatus = 'testing';
-    state.testMessage = '';
-    this.settingsService.testConnection(state.key).subscribe({
-      next: (res) => {
-        state.testStatus = res.status;
-        state.testMessage = res.message;
-      },
-      error: () => {
-        state.testStatus = 'error';
-        state.testMessage = 'Request failed';
-      },
+  testNotification(): void {
+    this.notifTesting    = true;
+    this.notifTestResult = '';
+    this.notifSvc.sendTest().pipe(catchError(() => of(null))).subscribe(res => {
+      this.notifTesting    = false;
+      this.notifTestResult = res ? 'Test message sent to Teams!' : 'Test failed — check webhook URL.';
     });
   }
 
-  configuredCount(): number {
-    return this.integrations.filter(i => i.config.configured).length;
+  deletingId  = '';
+  clearing    = false;
+
+  resolveUser(log: AuditLog): string {
+    if (log.user && log.user !== 'anonymous') return log.user;
+    return this.auth.user?.email ?? this.auth.user?.name ?? 'anonymous';
+  }
+
+  deleteLog(log: AuditLog): void {
+    if (this.deletingId) return;
+    this.deletingId = log.id;
+    this.settingsService.deleteAuditLog(log.id).pipe(
+      catchError(() => of(null))
+    ).subscribe(res => {
+      this.deletingId = '';
+      if (res !== null) {
+        this.auditLogs  = this.auditLogs.filter(l => l.id !== log.id);
+        this.auditTotal = Math.max(0, this.auditTotal - 1);
+      }
+    });
+  }
+
+  clearAll(): void {
+    if (!confirm('Delete all audit log entries? This cannot be undone.')) return;
+    this.clearing = true;
+    this.settingsService.clearAuditLogs().pipe(
+      catchError(() => of(null))
+    ).subscribe(() => {
+      this.clearing   = false;
+      this.auditLogs  = [];
+      this.auditTotal = 0;
+    });
+  }
+
+  loadAuditLogs(): void {
+    this.auditLoading = true;
+    this.auditError   = '';
+    this.settingsService.getAuditLogs({
+      limit:   200,
+      hours:   this.auditHours,
+      outcome: this.auditOutcome || undefined,
+    }).pipe(catchError(() => of(null))).subscribe(res => {
+      if (res) {
+        this.auditLogs  = res.logs;
+        this.auditTotal = res.total;
+      } else {
+        this.auditError = 'Failed to load audit logs';
+      }
+      this.auditLoading = false;
+    });
+  }
+
+  onFilterChange(): void { this.loadAuditLogs(); }
+
+  get filteredLogs(): AuditLog[] {
+    const q = this.auditSearch.toLowerCase().trim();
+    if (!q) return this.auditLogs;
+    return this.auditLogs.filter(l =>
+      this.resolveUser(l).toLowerCase().includes(q) ||
+      l.action.toLowerCase().includes(q) ||
+      l.resource.toLowerCase().includes(q) ||
+      (l.details ?? '').toLowerCase().includes(q)
+    );
+  }
+
+  actionIcon(action: string): string { return ACTION_ICONS[action] ?? 'history'; }
+
+  actionLabel(action: string): string {
+    return action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  formatTime(ts: string): string {
+    return new Date(ts).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+  }
+
+  relativeTime(ts: string): string {
+    const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+    if (m < 1)  return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  outcomeClass(outcome: string): string {
+    return { success: 'badge low', failure: 'badge critical', warning: 'badge medium' }[outcome] ?? 'badge';
   }
 }

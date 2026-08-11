@@ -75,7 +75,10 @@ class Normalizer:
             return "sophos-central"
         if "ms-graph" in groups:
             return "ms-graph"
-        return "wazuh"
+        # Native Wazuh agent events always have an agent block
+        if src.get("agent"):
+            return "wazuh"
+        return "wazuh"   # default — all events arrive via Wazuh pipeline
 
     
     def _generate_event_id(self, src):
@@ -133,26 +136,26 @@ class Normalizer:
         if data.get("integration") == "ms-defender":
             cat = (data.get("defender", {}).get("category") or "").strip()
             _MAP = {
-                "advancedPersistenceThreat": ("Email Activity",  "APT"),
-                "commandAndControl":         ("Email Activity",   "C2 Communication"),
-                "credentialAccess":          ("Email Activity",     "Credential Access"),
-                "defenseEvasion":            ("Email Activity",  "Defense Evasion"),
-                "discovery":                 ("Email Activity",  "Discovery"),
-                "execution":                 ("Email Activity",  "Execution"),
-                "exfiltration":              ("Email Activity",   "Exfiltration"),
-                "exploit":                   ("Email Activity",  "Exploit"),
-                "generalMalware":            ("Email Activity",  "Malware"),
-                "impact":                    ("Email Activity",  "Impact"),
-                "initialAccess":             ("Email Activity",  "Initial Access"),
-                "lateralMovement":           ("Email Activity",   "Lateral Movement"),
-                "maliciousActivity":         ("Email Activity",  "Malicious Activity"),
+                "advancedPersistenceThreat": ("Endpoint Activity",  "APT"),
+                "commandAndControl":         ("Network Activity",   "C2 Communication"),
+                "credentialAccess":          ("Identity Activity",  "Credential Access"),
+                "defenseEvasion":            ("Endpoint Activity",  "Defense Evasion"),
+                "discovery":                 ("Endpoint Activity",  "Discovery"),
+                "execution":                 ("Endpoint Activity",  "Execution"),
+                "exfiltration":              ("Network Activity",   "Exfiltration"),
+                "exploit":                   ("Endpoint Activity",  "Exploit"),
+                "generalMalware":            ("Endpoint Activity",  "Malware"),
+                "impact":                    ("Endpoint Activity",  "Impact"),
+                "initialAccess":             ("Endpoint Activity",  "Initial Access"),
+                "lateralMovement":           ("Network Activity",   "Lateral Movement"),
+                "maliciousActivity":         ("Endpoint Activity",  "Malicious Activity"),
                 "phishing":                  ("Email Security",     "Phishing"),
-                "persistence":               ("Email Activity",  "Persistence"),
-                "privilegeEscalation":       ("Email Activity",  "Privilege Escalation"),
-                "ransomware":                ("Email Activity",  "Ransomware"),
-                "suspiciousActivity":        ("Email Activity",  "Suspicious Activity"),
+                "persistence":               ("Endpoint Activity",  "Persistence"),
+                "privilegeEscalation":       ("Identity Activity",  "Privilege Escalation"),
+                "ransomware":                ("Endpoint Activity",  "Ransomware"),
+                "suspiciousActivity":        ("Endpoint Activity",  "Suspicious Activity"),
             }
-            return _MAP.get(cat, ("Email Activity", "Security Alert"))
+            return _MAP.get(cat, ("Endpoint Activity", "Security Alert"))
 
         if "ms-graph" in groups or data.get("integration") == "ms-graph":
             ms = data.get("ms-graph", {})
@@ -633,27 +636,6 @@ class Normalizer:
         return None
 
 
-    def _extract_darktrace_entities(self, src: dict):
-        data = src.get("data", {})
-        users = (data.get("device", {}) or {}).get("credentials") or []
-        users = list(dict.fromkeys([u for u in users if str(u).strip()]))
-        user = users[0] if users else None
-        host = (data.get("device", {}) or {}).get("hostname")
-        src_ip = data.get("sourceIP") or (data.get("device", {}) or {}).get("ip")
-        domain = data.get("dest")
-        remote_ip = self._darktrace_get_trigger_value(src, "Destination IP")
-        remote_port = self._darktrace_get_trigger_value(src, "Destination port")
-        return {
-        "user": user,
-        "users": users,
-        "host": host,
-        "src_ip": src_ip,
-        "remote_ip": remote_ip,
-        "remote_port": remote_port,
-        "domain": domain.lower() if isinstance(domain, str) else domain
-    }
-        
-       
     def _get_root_domain(self, domain):
         if not domain or not isinstance(domain, str):
             return None

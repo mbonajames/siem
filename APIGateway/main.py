@@ -1,14 +1,23 @@
 import asyncio
 import logging
+import os
 import time
+import httpx
 from fastapi import FastAPI, Query, HTTPException, Request, Depends, UploadFile, File, Body
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from typing import Optional, Any
+from jose import jwt as _jose_jwt
 import vuln_parser
 import vuln_store
 import vuln_report_xlsx
 import vuln_report_pdf
+import connectors as _connectors
+from routers.alert_status  import create_router as _alert_status_router
+from routers.mitre         import create_router as _mitre_router
+from routers.saved_searches import create_router as _saved_searches_router
+from routers.notifications  import create_router as _notifications_router, notification_poller
 from opensearchpy.exceptions import ConnectionError as OSConnectionError, TransportError
 from client import (
     indexer_client, SophosCentralClient, SophosAPIError,
@@ -22,6 +31,7 @@ from models import (
 )
 from auth import get_current_user, require_role
 import custom_dashboards as cd
+import audit_log as al
 
 from investigation_querry import build_investigation_query
 from integrations.virustotal import lookup_ip, lookup_domain, lookup_hash, lookup_url, VirusTotalError
@@ -44,6 +54,14 @@ from integrations.ms_defender import (
 
 log = logging.getLogger(__name__)
 
+# ── Grafana config ─────────────────────────────────────────────────────────────
+_GRAFANA_URL        = (os.getenv("GRAFANA_URL")        or "").rstrip("/")
+_GRAFANA_API_KEY    = os.getenv("GRAFANA_API_KEY",    "")
+_GRAFANA_PUBLIC_URL = (os.getenv("GRAFANA_PUBLIC_URL") or _GRAFANA_URL).rstrip("/")
+
+def _grafana_headers() -> dict:
+    return {"Authorization": f"Bearer {_GRAFANA_API_KEY}", "Accept": "application/json"}
+
 # Search both Wazuh-native and direct-Defender indices for unified correlation
 ALERT_INDICES = "wazuh-alerts-*,siem-defender-*"
 
@@ -57,6 +75,124 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Feature routers (included after indexer_client is ready below) ────────────
+# Routers are registered in the startup event so indexer_client is available.
+
+# ── Audit middleware ──────────────────────────────────────────────────────────
+# Only login and critical/destructive actions are recorded.
+# Each entry is (HTTP method, path prefix, human-readable label).
+# The list is checked in order; first match wins.
+_CRITICAL_ACTIONS = [
+    # Dashboard mutations
+    ("POST",   "/custom-dashboards",        "create_dashboard"),
+    ("DELETE", "/custom-dashboards/",       "delete_dashboard"),
+    ("PATCH",  "/custom-dashboards/",       "share_dashboard"),
+    # Jira ticket creation
+    ("POST",   "/jira/tickets",             "create_jira_ticket"),
+    # Integration credential changes
+    ("PATCH",  "/settings/",               "save_integration_settings"),
+    # Vulnerability scan management
+    ("POST",   "/vuln/upload",             "upload_vulnerability_scan"),
+    ("DELETE", "/vuln/scans/",             "delete_vulnerability_scan"),
+    # Endpoint isolation (high-impact)
+    ("POST",   "/endpoints/",              "endpoint_action"),
+    # Defender manual ingest
+    ("POST",   "/defender/ingest",         "defender_ingest"),
+]
+
+
+def _match_critical(method: str, path: str):
+    """Return the action label if this request should be audited, else None."""
+    for m, prefix, label in _CRITICAL_ACTIONS:
+        if method == m and path.startswith(prefix):
+            return label
+    return None
+
+
+def _user_from_request(request: Request) -> str:
+    """Resolve the caller's identity from the incoming request.
+
+    Strategy (first non-empty result wins):
+    1. JWT Bearer token claims (preferred_username / email / name / oid)
+       — works when the access token carries identity claims.
+    2. X-User-Email header sent by ApiService on every request
+       — reliable fallback because it reads from the MSAL ID-token account
+         object (acct.username), which always contains the UPN regardless of
+         what claims the custom-API access token exposes.
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            claims = _jose_jwt.get_unverified_claims(auth[7:])
+            user = (
+                claims.get("preferred_username")
+                or claims.get("unique_name")   # Azure AD v1.0
+                or claims.get("upn")
+                or claims.get("email")
+                or claims.get("name")
+                or claims.get("oid")
+            )
+            if user:
+                return user
+        except Exception:
+            pass
+
+    # Fallback: X-User-Email header injected by the Angular ApiService
+    x_email = request.headers.get("X-User-Email", "").strip()
+    if x_email:
+        return x_email
+
+    return "anonymous"
+
+
+def _user_from_claims(claims: dict) -> str:
+    """Extract a display-friendly identity string from already-decoded JWT claims."""
+    return (
+        claims.get("preferred_username")
+        or claims.get("unique_name")
+        or claims.get("upn")
+        or claims.get("email")
+        or claims.get("name")
+        or claims.get("oid", "anonymous")
+    )
+
+
+@app.middleware("http")
+async def _audit_log_middleware(request: Request, call_next):
+    response = await call_next(request)
+
+    # Only proceed for whitelisted critical actions
+    action = _match_critical(request.method, request.url.path)
+    if action is None:
+        return response
+
+    # Decode identity directly from the Bearer token (no network calls, no
+    # cross-layer state sharing needed — just base64-decodes the JWT payload).
+    user = _user_from_request(request)
+
+    outcome = "success" if response.status_code < 400 else "failure"
+
+    ip = request.headers.get("X-Forwarded-For", "")
+    if ip:
+        ip = ip.split(",")[0].strip()
+    elif request.client:
+        ip = request.client.host
+
+    asyncio.create_task(
+        asyncio.to_thread(
+            al.write_entry, indexer_client,
+            user=user,
+            action=action,
+            resource=request.url.path,
+            outcome=outcome,
+            ip_address=ip,
+            details=f"HTTP {response.status_code}",
+        )
+    )
+
+    return response
 
 
 @app.exception_handler(OSConnectionError)
@@ -1112,6 +1248,57 @@ def create_jira_ticket(req: JiraTicketRequest):
     return result
 
 
+class BatchTicketRequest(BaseModel):
+    alert_ids: list[str]
+    title:     str
+    severity:  str = "High"
+    note:      Optional[str] = None
+
+
+@app.post("/jira/tickets/batch")
+def create_batch_jira_ticket(
+    req:   BatchTicketRequest,
+    _user: dict = Depends(get_current_user),
+):
+    """Create one Jira ticket that consolidates multiple selected alerts."""
+    if not jira_client.configured:
+        raise HTTPException(503, "JIRA not configured")
+
+    # Fetch alert details from OpenSearch for context
+    hits = []
+    try:
+        r = indexer_client.search(index=ALERT_INDICES, body={
+            "size": len(req.alert_ids),
+            "query": {"ids": {"values": req.alert_ids}},
+        })
+        hits = r["hits"]["hits"]
+    except Exception:
+        pass
+
+    lines = [f"*Consolidated case from {len(req.alert_ids)} selected alerts*\n"]
+    if req.note:
+        lines.append(f"*Analyst note:* {req.note}\n")
+    lines.append("||Time||Source||Severity||Summary||")
+    for h in hits:
+        src    = h["_source"]
+        norm   = normalizer.normalize(h)
+        lines.append(
+            f"|{norm.get('time','—')}|{norm.get('source','—')}|{norm.get('severity','—')}|{norm.get('summary','—')}|"
+        )
+
+    description = "\n".join(lines)
+    result = jira_client.create_issue(
+        project   = jira_client.project,
+        summary   = req.title,
+        issuetype = "Task",
+        priority  = req.severity,
+        description = description,
+    )
+    if result is None:
+        raise HTTPException(502, "Jira API error")
+    return result
+
+
 # ── VirusTotal endpoints ──────────────────────────────────────────────────────
 
 def _vt_error(e: Exception) -> HTTPException:
@@ -1550,12 +1737,13 @@ def get_wazuh_rules(
 ):
     if not wazuh_server_client.configured:
         raise _wazuh_server_unavailable()
-    params: dict = {"limit": limit, "offset": offset}
+    params: dict = {"limit": limit, "offset": offset, "wait_for_complete": True}
     if level is not None: params["level"] = level
     if search:            params["search"] = search
     try:
         return wazuh_server_client.get("/rules", params)
     except Exception as exc:
+        log.exception("Wazuh /rules failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"Wazuh API error: {exc}")
 
 
@@ -1674,12 +1862,93 @@ async def _start_jira_autoticket_poller():
 
 
 @app.on_event("startup")
+async def _register_feature_routers():
+    """Register routers that need the indexer_client (available after module init)."""
+    app.include_router(_alert_status_router(indexer_client))
+    app.include_router(_mitre_router(indexer_client))
+    app.include_router(_saved_searches_router(indexer_client))
+    app.include_router(_notifications_router(indexer_client))
+    # Start Teams notification background poller
+    asyncio.create_task(notification_poller(indexer_client))
+    log.info("Feature routers registered: alert-status, mitre, saved-searches, notifications")
+
+
+@app.on_event("startup")
 async def _init_dashboard_index():
     try:
         cd.ensure_index(indexer_client)
     except Exception:
         pass  # non-fatal if OpenSearch is temporarily unavailable
 
+
+@app.on_event("startup")
+async def _init_audit_index():
+    try:
+        al.ensure_index(indexer_client)
+    except Exception:
+        pass  # non-fatal if OpenSearch is temporarily unavailable
+
+
+@app.get("/audit-logs")
+def get_audit_logs(
+    hours:   int = Query(24, ge=1, le=720),
+    limit:   int = Query(200, ge=1, le=500),
+    outcome: str = Query(""),
+    _user:   dict = Depends(get_current_user),
+):
+    return al.query_logs(indexer_client, hours=hours, limit=limit, outcome=outcome)
+
+
+@app.post("/audit-logs/login", status_code=204)
+def record_login(
+    request: Request,
+    body:  dict = Body(default={}),
+    _user: dict = Depends(get_current_user),
+):
+    """Called by the Angular app immediately after MSAL login completes.
+
+    Frontend sends {email, display_name} in the body so the user is always
+    recorded even when the Bearer token is not yet available (MSAL race on
+    first login redirect).  JWT claims are still preferred when present.
+    """
+    user = _user_from_claims(_user) if _user else ""
+    if not user or user == "anonymous":
+        # Fall back to the user info sent explicitly by the frontend
+        user = body.get("email") or body.get("display_name") or "anonymous"
+    ip = (request.headers.get("X-Forwarded-For", "") or "").split(",")[0].strip()
+    if not ip and request.client:
+        ip = request.client.host
+    al.write_entry(
+        indexer_client,
+        user=user, action="login", resource="siem-dashboard",
+        outcome="success", ip_address=ip or "",
+        details="User session started",
+    )
+    return Response(status_code=204)
+
+
+@app.delete("/audit-logs/{log_id}", status_code=204)
+def delete_audit_log(
+    log_id: str,
+    _user:  dict = Depends(get_current_user),
+):
+    """Delete a single audit log entry. Requires authentication."""
+    deleted = al.delete_entry(indexer_client, log_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+    return Response(status_code=204)
+
+
+@app.delete("/audit-logs", status_code=200)
+def clear_audit_logs(
+    _user: dict = Depends(get_current_user),
+):
+    """Delete all audit log entries. Requires authentication."""
+    count = al.clear_all(indexer_client)
+    return {"deleted": count}
+
+
+# ── Custom dashboards ──────────────────────────────────────────────────────────
 
 @app.get("/custom-dashboards")
 def list_dashboards(request: Request, user: dict = Depends(get_current_user)):
@@ -2065,6 +2334,159 @@ def email_stats(
         "Blocked":     0,
         "Delivered":   0,
         "Quarantined": 0,
+    }
+
+
+@app.get("/email/threat-map/")
+def email_threat_map(
+    days:        int           = Query(7,  ge=1, le=30),
+    threat_type: Optional[str] = Query(None),
+    delivery:    Optional[str] = Query(None),   # "blocked" | "delivered" | ""
+    _user:       dict          = Depends(get_current_user),
+):
+    """
+    Sender→recipient threat map built from Defender alerts + incident grouping.
+
+    Queries ALL Defender alerts (not just Office-365-specific) so phishing/malware
+    alerts detected by Endpoint or other services are also captured.
+    Incident metadata embedded in each alert document is used to:
+      - Elevate severity when the parent incident is more severe than the alert
+      - Count unique incidents per sender domain (campaign breadth)
+    """
+    # Base filters: all Defender alerts in the time window
+    filters: list = [
+        {"term": {"data.integration": "ms-defender"}},
+        {"range": {"@timestamp": {"gte": f"now-{days}d/d"}}},
+    ]
+    if threat_type:
+        target  = threat_type.lower()
+        matched = [k for k, v in _DEF_CAT_TO_THREAT.items()
+                   if target in v.lower() or target in k.lower()]
+        if matched:
+            filters.append({"terms": {"data.defender.category": matched}})
+
+    query = {
+        "size": 1000,
+        "query": {"bool": {"filter": filters}},
+        "sort":  [{"@timestamp": "desc"}],
+    }
+    try:
+        result = indexer_client.search(index=ALERT_INDICES, ignore_unavailable=True, body=query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    _sev_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+    sender_map:    dict = {}  # domain → {count, threat_types, blocked, delivered, max_sev, incidents}
+    recipient_map: dict = {}  # email  → {count, blocked, delivered}
+    edges_raw:     dict = {}  # (domain, email) → count
+
+    for hit in result["hits"]["hits"]:
+        rec    = _hit_to_email_record(hit)
+        domain = rec.get("SenderDomain") or ""
+        if not domain:
+            continue  # alert has no email evidence — skip
+
+        threat      = rec.get("ThreatTypes") or ""
+        action      = (rec.get("DeliveryAction") or "").lower()
+        alert_sev   = (rec.get("Severity") or "").lower()
+        incident_id = rec.get("IncidentId") or ""
+        # Incident-level severity can be higher than the individual alert
+        inc_sev     = (rec.get("IncidentSeverity") or "").lower()
+        eff_sev     = alert_sev if _sev_rank.get(alert_sev, 0) >= _sev_rank.get(inc_sev, 0) else inc_sev
+
+        if delivery == "blocked" and action not in ("blocked", "quarantined"):
+            continue
+        if delivery == "delivered" and action != "delivered":
+            continue
+
+        blocked = action in ("blocked", "quarantined")
+
+        if domain not in sender_map:
+            sender_map[domain] = {
+                "count": 0, "threat_types": set(),
+                "blocked": 0, "delivered": 0,
+                "max_sev": "", "incidents": set(),
+            }
+        s = sender_map[domain]
+        s["count"] += 1
+        if threat:
+            s["threat_types"].add(threat)
+        if blocked:
+            s["blocked"] += 1
+        else:
+            s["delivered"] += 1
+        if _sev_rank.get(eff_sev, 0) > _sev_rank.get(s["max_sev"], 0):
+            s["max_sev"] = eff_sev
+        if incident_id:
+            s["incidents"].add(incident_id)
+
+        all_rcpts = rec.get("AllRecipients") or [rec.get("RecipientEmailAddress", "")]
+        for r in (r for r in all_rcpts if r):
+            if r not in recipient_map:
+                recipient_map[r] = {"count": 0, "blocked": 0, "delivered": 0}
+            recipient_map[r]["count"] += 1
+            if blocked:
+                recipient_map[r]["blocked"] += 1
+            else:
+                recipient_map[r]["delivered"] += 1
+            key = (domain, r)
+            edges_raw[key] = edges_raw.get(key, 0) + 1
+
+    top_senders    = sorted(sender_map.items(), key=lambda x: -x[1]["count"])[:20]
+    top_sender_ids = {d for d, _ in top_senders}
+
+    relevant_recipients = {r for (d, r) in edges_raw if d in top_sender_ids}
+    top_recipients = sorted(
+        [(r, recipient_map[r]) for r in relevant_recipients],
+        key=lambda x: -x[1]["count"],
+    )[:30]
+    top_recipient_ids = {r for r, _ in top_recipients}
+
+    nodes = [
+        {
+            "id":             domain,
+            "type":           "sender",
+            "count":          data["count"],
+            "threat_types":   sorted(data["threat_types"]),
+            "blocked":        data["blocked"],
+            "delivered":      data["delivered"],
+            "severity":       data["max_sev"],
+            "incident_count": len(data["incidents"]),
+        }
+        for domain, data in top_senders
+    ] + [
+        {
+            "id":        email,
+            "type":      "recipient",
+            "count":     data["count"],
+            "blocked":   data["blocked"],
+            "delivered": data["delivered"],
+        }
+        for email, data in top_recipients
+    ]
+
+    edges = [
+        {"from": d, "to": r, "count": cnt}
+        for (d, r), cnt in edges_raw.items()
+        if d in top_sender_ids and r in top_recipient_ids
+    ]
+
+    total         = sum(d["count"]   for d in sender_map.values())
+    total_blocked = sum(d["blocked"] for d in sender_map.values())
+    all_incidents = set().union(*(d["incidents"] for d in sender_map.values()))
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "stats": {
+            "senders":    len(top_senders),
+            "recipients": len(top_recipients),
+            "total":      total,
+            "blocked":    total_blocked,
+            "delivered":  total - total_blocked,
+            "incidents":  len(all_incidents),
+        },
     }
 
 
@@ -2455,3 +2877,265 @@ def vuln_report_executive(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )
+
+
+# ── Connectors ────────────────────────────────────────────────────────────────
+
+@app.get("/connectors")
+def get_connectors(_user: dict = Depends(get_current_user)):
+    """Return all registered connectors with their configuration status."""
+    return _connectors.list_connectors()
+
+
+@app.get("/connectors/{connector_id}/test")
+async def test_connector(connector_id: str, _user: dict = Depends(get_current_user)):
+    """Run a live health check for a specific connector."""
+    result = await _connectors.test_connector(connector_id)
+    return result
+
+
+# ── Grafana proxy ──────────────────────────────────────────────────────────────
+
+def _grafana_unavailable():
+    return HTTPException(status_code=503, detail="Grafana not configured — set GRAFANA_URL and GRAFANA_API_KEY")
+
+
+@app.get("/grafana/config")
+def grafana_config(_user: dict = Depends(get_current_user)):
+    return {
+        "configured":  bool(_GRAFANA_URL and _GRAFANA_API_KEY),
+        "public_url":  _GRAFANA_PUBLIC_URL,
+    }
+
+
+@app.get("/grafana/dashboards")
+async def grafana_list_dashboards(
+    q:      str = Query("",  description="Search query"),
+    folder: str = Query("",  description="Folder UID filter"),
+    limit:  int = Query(200, ge=1, le=1000),
+    _user:  dict = Depends(get_current_user),
+):
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    params: dict = {"type": "dash-db", "limit": limit}
+    if q:      params["query"]     = q
+    if folder: params["folderIds"] = folder
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.get(f"{_GRAFANA_URL}/api/search", headers=_grafana_headers(), params=params)
+        if not r.is_success:
+            raise HTTPException(status_code=502, detail=f"Grafana error: HTTP {r.status_code}")
+        return r.json()
+    except httpx.RequestError as exc:
+        log.exception("Grafana /api/search failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.get("/grafana/folders")
+async def grafana_list_folders(_user: dict = Depends(get_current_user)):
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.get(f"{_GRAFANA_URL}/api/folders", headers=_grafana_headers())
+        if not r.is_success:
+            raise HTTPException(status_code=502, detail=f"Grafana error: HTTP {r.status_code}")
+        return r.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.get("/grafana/dashboards/{uid}")
+async def grafana_get_dashboard(uid: str, _user: dict = Depends(get_current_user)):
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.get(f"{_GRAFANA_URL}/api/dashboards/uid/{uid}", headers=_grafana_headers())
+        if r.status_code == 404:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        if not r.is_success:
+            raise HTTPException(status_code=502, detail=f"Grafana error: HTTP {r.status_code}")
+        return r.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.post("/grafana/dashboards", status_code=200)
+async def grafana_create_dashboard(payload: dict = Body(...), _user: dict = Depends(get_current_user)):
+    """
+    Create or overwrite a Grafana dashboard.
+    Payload: { dashboard: {...}, folderId?: int, folderUid?: str, overwrite?: bool, message?: str }
+    Set dashboard.id=null / dashboard.uid=null for new; supply uid to update existing.
+    """
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    try:
+        async with httpx.AsyncClient(timeout=15, verify=False) as c:
+            r = await c.post(f"{_GRAFANA_URL}/api/dashboards/db",
+                             headers=_grafana_headers(), json=payload)
+        if not r.is_success:
+            raise HTTPException(status_code=r.status_code, detail=r.json())
+        return r.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.delete("/grafana/dashboards/{uid}", status_code=200)
+async def grafana_delete_dashboard(uid: str, _user: dict = Depends(get_current_user)):
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.delete(f"{_GRAFANA_URL}/api/dashboards/uid/{uid}",
+                               headers=_grafana_headers())
+        if r.status_code == 404:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        if not r.is_success:
+            raise HTTPException(status_code=r.status_code, detail=r.json())
+        return r.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.post("/grafana/folders", status_code=200)
+async def grafana_create_folder(payload: dict = Body(...), _user: dict = Depends(get_current_user)):
+    """Create a Grafana folder. Payload: { title: str, uid?: str }"""
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.post(f"{_GRAFANA_URL}/api/folders",
+                             headers=_grafana_headers(), json=payload)
+        if not r.is_success:
+            raise HTTPException(status_code=r.status_code, detail=r.json())
+        return r.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.get("/grafana/datasources")
+async def grafana_list_datasources(_user: dict = Depends(get_current_user)):
+    """List configured data sources — used when building new dashboards."""
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.get(f"{_GRAFANA_URL}/api/datasources", headers=_grafana_headers())
+        if not r.is_success:
+            raise HTTPException(status_code=502, detail=f"Grafana error: HTTP {r.status_code}")
+        return r.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+# Datasource definitions — use the built-in Elasticsearch plugin (type=elasticsearch).
+# OpenSearch is API-compatible; setting esVersion="7.10.0" suppresses the version warning.
+# tlsSkipVerify is honoured by Grafana's proxy layer once set in grafana.ini (see below)
+# and also via secureJsonFields for per-datasource skip.
+_OPENSEARCH_DATASOURCES = [
+    {
+        "name":           "wazuh-alerts",
+        "type":           "elasticsearch",
+        "access":         "proxy",
+        "url":            os.getenv("WAZUH_INDEXER_URL", "https://192.168.47.178:9200"),
+        "basicAuth":      True,
+        "basicAuthUser":  os.getenv("WAZUH_INDEXER_USER", "admin"),
+        "secureJsonData": {"basicAuthPassword": os.getenv("WAZUH_INDEXER_PASSWORD", "")},
+        "jsonData": {
+            "esVersion":                   "7.10.0",
+            "tlsSkipVerify":               True,
+            "index":                       "wazuh-alerts-4.x-*",
+            "timeField":                   "@timestamp",
+            "maxConcurrentShardRequests":   5,
+            "logLevelField":               "rule.level",
+            "logMessageField":             "rule.description",
+            "interval":                    "Daily",
+        },
+    },
+    {
+        "name":           "siem-defender",
+        "type":           "elasticsearch",
+        "access":         "proxy",
+        "url":            os.getenv("WAZUH_INDEXER_URL", "https://192.168.47.178:9200"),
+        "basicAuth":      True,
+        "basicAuthUser":  os.getenv("WAZUH_INDEXER_USER", "admin"),
+        "secureJsonData": {"basicAuthPassword": os.getenv("WAZUH_INDEXER_PASSWORD", "")},
+        "jsonData": {
+            "esVersion":                   "7.10.0",
+            "tlsSkipVerify":               True,
+            "index":                       "siem-defender-*",
+            "timeField":                   "@timestamp",
+            "maxConcurrentShardRequests":   5,
+            "interval":                    "Daily",
+        },
+    },
+    {
+        "name":           "darktrace-agemail",
+        "type":           "elasticsearch",
+        "access":         "proxy",
+        "url":            os.getenv("WAZUH_INDEXER_URL", "https://192.168.47.178:9200"),
+        "basicAuth":      True,
+        "basicAuthUser":  os.getenv("WAZUH_INDEXER_USER", "admin"),
+        "secureJsonData": {"basicAuthPassword": os.getenv("WAZUH_INDEXER_PASSWORD", "")},
+        "jsonData": {
+            "esVersion":                   "7.10.0",
+            "tlsSkipVerify":               True,
+            "index":                       "darktrace-index_deflector",
+            "timeField":                   "timestamp",
+            "maxConcurrentShardRequests":   5,
+        },
+    },
+]
+
+
+@app.post("/grafana/datasources/provision", status_code=200)
+async def grafana_provision_datasources(_user: dict = Depends(get_current_user)):
+    """
+    Create (or update) the three standard OpenSearch data sources in Grafana
+    with tlsSkipVerify=true so the self-signed cert on the indexer is accepted.
+    Already-existing sources with the same name are updated in place.
+    """
+    if not _GRAFANA_URL or not _GRAFANA_API_KEY:
+        raise _grafana_unavailable()
+
+    results = []
+    hdrs = {**_grafana_headers(), "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient(timeout=15, verify=False) as c:
+        # Fetch existing sources so we can PATCH instead of POST for duplicates
+        existing_r = await c.get(f"{_GRAFANA_URL}/api/datasources", headers=hdrs)
+        existing: dict[str, int] = {}
+        if existing_r.is_success:
+            for ds in existing_r.json():
+                existing[ds["name"]] = ds["id"]
+
+        for ds in _OPENSEARCH_DATASOURCES:
+            try:
+                if ds["name"] in existing:
+                    ds_id = existing[ds["name"]]
+                    r = await c.put(
+                        f"{_GRAFANA_URL}/api/datasources/{ds_id}",
+                        headers=hdrs,
+                        json={**ds, "id": ds_id},
+                    )
+                else:
+                    r = await c.post(
+                        f"{_GRAFANA_URL}/api/datasources",
+                        headers=hdrs,
+                        json=ds,
+                    )
+                results.append({
+                    "name":    ds["name"],
+                    "status":  "updated" if ds["name"] in existing else "created",
+                    "ok":      r.is_success,
+                    "detail":  r.json() if r.is_success else r.text,
+                })
+            except Exception as exc:
+                results.append({"name": ds["name"], "status": "error", "ok": False, "detail": str(exc)})
+
+    all_ok = all(r["ok"] for r in results)
+    if not all_ok:
+        raise HTTPException(status_code=502, detail=results)
+    return {"results": results}
+

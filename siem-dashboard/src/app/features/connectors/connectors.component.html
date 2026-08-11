@@ -1,0 +1,110 @@
+<div class="conn-page">
+
+  <!-- ── Page header ────────────────────────────────────────────────────────── -->
+  <div class="conn-header">
+    <div class="conn-header-left">
+      <h1 class="conn-title">
+        <mat-icon>cable</mat-icon>
+        Connectors
+      </h1>
+      <p class="conn-subtitle">Manage integrations between Hope-Armor SIEM and your security stack</p>
+    </div>
+
+    @if (!loading) {
+      <div class="conn-summary">
+        <div class="summary-tile">
+          <span class="summary-val">{{ connectors.length }}</span>
+          <span class="summary-lbl">Total</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-tile">
+          <span class="summary-val configured">{{ totalConfigured }}</span>
+          <span class="summary-lbl">Configured</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-tile">
+          <span class="summary-val connected">{{ totalConnected }}</span>
+          <span class="summary-lbl">Connected</span>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- ── Loading ────────────────────────────────────────────────────────────── -->
+  @if (loading) {
+    <div class="conn-loading">
+      <mat-spinner diameter="32" />
+      <span>Loading connectors…</span>
+    </div>
+  }
+
+  <!-- ── Flat grid — all connectors, 3 per row ───────────────────────────── -->
+  @if (!loading) {
+    <div class="conn-grid">
+      @for (c of connectors; track c.id) {
+        <div class="conn-card" [class.conn-card--dim]="!c.configured">
+
+          <!-- Status dot -->
+          <span class="status-dot" [class]="statusClass(c)"
+                [matTooltip]="statusLabel(c)"></span>
+
+          <!-- Icon -->
+          <div class="conn-icon-wrap" [style.background]="c.configured ? c.color + '18' : 'rgba(110,118,129,.08)'"
+               [style.border-color]="c.configured ? c.color + '30' : 'rgba(110,118,129,.14)'">
+            <mat-icon [style.color]="c.configured ? c.color : 'var(--siem-text-faint)'">{{ c.icon }}</mat-icon>
+          </div>
+
+          <!-- Name + category -->
+          <div class="conn-meta">
+            <span class="conn-name">{{ c.name }}</span>
+            <span class="conn-category-badge" [class]="'cat-' + c.category.toLowerCase().replace(' ', '-')">{{ c.category }}</span>
+          </div>
+
+          <!-- Description -->
+          <p class="conn-desc">{{ c.description }}</p>
+
+          <!-- Footer: status chip + test button -->
+          <div class="conn-footer">
+            <span class="conn-status-chip" [class]="statusClass(c)">
+              <span class="chip-dot"></span>
+              {{ statusLabel(c) }}
+            </span>
+
+            @if (c.configured) {
+              <button class="test-btn" (click)="test(c)" [disabled]="c.testing"
+                      matTooltip="Test connectivity">
+                @if (c.testing) {
+                  <mat-spinner diameter="12" />
+                } @else {
+                  <mat-icon>bolt</mat-icon>
+                }
+                Test
+              </button>
+            } @else {
+              <span class="not-cfg-hint">Set env vars to enable</span>
+            }
+          </div>
+
+          <!-- Test result detail -->
+          @if (c.testDetail) {
+            <div class="test-detail" [class.ok]="c.status === 'connected'">
+              <mat-icon>{{ c.status === 'connected' ? 'check_circle' : 'error_outline' }}</mat-icon>
+              {{ c.testDetail }}
+            </div>
+          }
+
+        </div>
+      }
+    </div>
+
+    <!-- ── Add integration hint ────────────────────────────────────────────── -->
+    <div class="add-hint">
+      <mat-icon>add_circle_outline</mat-icon>
+      <div>
+        <strong>Need a new integration?</strong>
+        <p>Add the required environment variables to your deployment config and the connector will appear as configured automatically.</p>
+      </div>
+    </div>
+  }
+
+</div>
