@@ -8,7 +8,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { SettingsService, AuditLog } from '../../core/services/settings.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationsService, NotificationConfig } from '../../core/services/notifications.service';
@@ -57,18 +57,18 @@ export class SettingsComponent implements OnInit {
   auditOutcome = '';
   auditSearch  = '';
 
-  /** true → /settings view; false → /activity-log view */
-  get isSettingsView(): boolean {
-    return this.router.url.startsWith('/settings');
-  }
+  /** true → /settings view; false → /activity-log view — set by the matched route's data, not guessed from the URL */
+  readonly isSettingsView: boolean;
 
   constructor(
     private settingsService:   SettingsService,
     private notifSvc:          NotificationsService,
     private snackBar:          MatSnackBar,
-    private router:            Router,
+    route:                     ActivatedRoute,
     private cdr:               ChangeDetectorRef,
-  ) {}
+  ) {
+    this.isSettingsView = route.snapshot.data['isSettingsView'] === true;
+  }
 
   ngOnInit(): void {
     this.loadAuditLogs();
