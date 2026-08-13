@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -249,6 +249,7 @@ export class CasesDialogComponent {
     public ref: MatDialogRef<CasesDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { cases: any[]; total: number },
     private sophos: SophosService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   loadDetections(caseId: string): void {
@@ -258,10 +259,12 @@ export class CasesDialogComponent {
       next: (res) => {
         this.detectionsMap.set(caseId, res?.items ?? []);
         this.detectionsLoading.delete(caseId);
+        this.cdr.detectChanges();
       },
       error: () => {
         this.detectionsMap.set(caseId, []);
         this.detectionsLoading.delete(caseId);
+        this.cdr.detectChanges();
       }
     });
   }

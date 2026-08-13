@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
@@ -76,10 +76,15 @@ export class DevicesComponent implements OnInit, OnDestroy {
     private wazuh: WazuhService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
     this.loadDevices();
+  }
+
+  onReuse(): void {
+    if (!this.dataSource.data.length || this.loading) this.loadDevices();
   }
 
   ngOnDestroy(): void {
@@ -111,8 +116,9 @@ export class DevicesComponent implements OnInit, OnDestroy {
         this.wazuhAgents = data.wazuhAgents?.data?.affected_items ?? [];
         this.applyFilters();
         this.loading = false;
+        this.cdr.detectChanges();
       },
-      error: () => { this.loading = false; }
+      error: () => { this.loading = false; this.cdr.detectChanges(); }
     });
   }
 
@@ -191,8 +197,9 @@ export class DevicesComponent implements OnInit, OnDestroy {
         this.isolationPending.set(device.id, 'isolating');
         this.snackBar.open(`Isolating ${device.hostname}…`, undefined, { duration: 3000 });
         this.pollIsolationStatus(device.id, 'isolated');
+        this.cdr.detectChanges();
       },
-      error: (err) => this.snackBar.open(`Failed to isolate: ${this.sophosErrMsg(err)}`, 'Close', { duration: 6000 })
+      error: (err) => { this.snackBar.open(`Failed to isolate: ${this.sophosErrMsg(err)}`, 'Close', { duration: 6000 }); this.cdr.detectChanges(); }
     });
   }
 
@@ -203,8 +210,9 @@ export class DevicesComponent implements OnInit, OnDestroy {
         this.isolationPending.set(device.id, 'removing');
         this.snackBar.open(`Removing isolation from ${device.hostname}…`, undefined, { duration: 3000 });
         this.pollIsolationStatus(device.id, 'notIsolated');
+        this.cdr.detectChanges();
       },
-      error: (err) => this.snackBar.open(`Failed to remove isolation: ${this.sophosErrMsg(err)}`, 'Close', { duration: 6000 })
+      error: (err) => { this.snackBar.open(`Failed to remove isolation: ${this.sophosErrMsg(err)}`, 'Close', { duration: 6000 }); this.cdr.detectChanges(); }
     });
   }
 

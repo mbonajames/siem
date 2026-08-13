@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -7,6 +7,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { GatewayService, JiraTicket, JiraAssignee } from '../../core/services/gateway.service';
 
 @Component({
@@ -20,7 +22,9 @@ import { GatewayService, JiraTicket, JiraAssignee } from '../../core/services/ga
   templateUrl: './jira-tickets.component.html',
   styleUrl:    './jira-tickets.component.scss',
 })
-export class JiraTicketsComponent implements OnInit {
+export class JiraTicketsComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+
   tickets:   JiraTicket[]   = [];
   assignees: JiraAssignee[] = [];
   total   = 0;
@@ -34,14 +38,21 @@ export class JiraTicketsComponent implements OnInit {
   assigningKey:     string | null = null;   // ticket key whose dropdown is open
   assigningLoading  = false;
 
-  constructor(private gateway: GatewayService, private snackBar: MatSnackBar) {}
+  constructor(private gateway: GatewayService, private snackBar: MatSnackBar, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.load();
-    this.gateway.getJiraAssignees().subscribe({
-      next: ({ assignees }) => { this.assignees = assignees; },
-      error: () => {},
-    });
+    this.gateway.getJiraAssignees()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: ({ assignees }) => { this.assignees = assignees; this.cdr.detectChanges(); },
+        error: () => {},
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   load(): void {
@@ -51,20 +62,29 @@ export class JiraTicketsComponent implements OnInit {
       status:      this.statusFilter,
       severity:    this.severityFilter || undefined,
       max_results: 200,
-    }).subscribe({
+    }).pipe(takeUntil(this.destroy$)).subscribe({
       next: ({ total, tickets }) => {
         this.total   = total;
-        this.tickets = tickets;
+        this.tickets = tickets ?? [];
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         this.error   = err?.error?.detail ?? err?.message ?? 'Failed to load JIRA tickets.';
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }
 
   onFilterChange(): void { this.load(); }
+
+  // Called by ShellComponent when this component is re-activated via KEEP_ALIVE.
+  onReuse(): void {
+    if (this.error || !this.tickets.length || this.loading) {
+      this.load();
+    }
+  }
 
   // ── Overview stats (computed from loaded tickets) ─────────────────────────
   get overview() {
@@ -98,10 +118,12 @@ export class JiraTicketsComponent implements OnInit {
         ticket.assignee       = assignee.display_name;
         this.assigningLoading = false;
         this.snackBar.open(`${ticket.key} assigned to ${assignee.display_name}`, 'OK', { duration: 4000 });
+        this.cdr.detectChanges();
       },
       error: (err) => {
         this.assigningLoading = false;
         this.snackBar.open(err?.error?.detail ?? 'Failed to assign ticket', 'Dismiss', { duration: 6000 });
+        this.cdr.detectChanges();
       },
     });
   }

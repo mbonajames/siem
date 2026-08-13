@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
-import { MsalService } from '@azure/msal-angular';
+import { AuthService } from './auth.service';
 
 export type EntityType = 'user' | 'host' | 'ip' | 'domain';
 export type SeverityLevel = 'Low' | 'Medium' | 'High' | 'Critical';
@@ -285,11 +285,11 @@ export const WIDGET_CATALOG: { type: WidgetType; label: string; description: str
 
 @Injectable({ providedIn: 'root' })
 export class GatewayService {
-  constructor(private api: ApiService, private msal: MsalService) {}
+  constructor(private api: ApiService, private auth: AuthService) {}
 
   private ownerHeaders(): Record<string, string> {
-    const username = this.msal.instance.getActiveAccount()?.username;
-    return username ? { 'X-SIEM-Owner': username } : {};
+    const email = this.auth.user?.email;
+    return email ? { 'X-SIEM-Owner': email } : {};
   }
 
   getAlerts(filter: AlertFilter = {}): Observable<AlertsPage> {

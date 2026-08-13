@@ -8,15 +8,22 @@ export class SiemReuseStrategy implements RouteReuseStrategy {
   private handles = new Map<string, DetachedRouteHandle>();
 
   private readonly KEEP_ALIVE = new Set([
-    'dashboard', 'devices', 'rules', 'tickets', 'nessus', 'correlation'
+    'dashboard', 'devices', 'nessus',
+    'alerts', 'network-security', 'email-security',
+    'identity', 'jira', 'my-dashboards', 'my-dashboards/:id',
+    'connectors', 'discover',
   ]);
 
   private key(r: ActivatedRouteSnapshot): string {
-    return r.routeConfig?.path ?? '';
+    const path = r.routeConfig?.path ?? '';
+    // For parameterised routes, include param values so each unique URL gets
+    // its own cached instance (e.g. /my-dashboards/uid1 ≠ /my-dashboards/uid2).
+    const params = Object.values(r.params).join('/');
+    return params ? `${path}::${params}` : path;
   }
 
   shouldDetach(route: ActivatedRouteSnapshot): boolean {
-    return this.KEEP_ALIVE.has(this.key(route));
+    return this.KEEP_ALIVE.has(route.routeConfig?.path ?? '');
   }
 
   store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle | null): void {
@@ -32,6 +39,9 @@ export class SiemReuseStrategy implements RouteReuseStrategy {
   }
 
   shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
-    return future.routeConfig === curr.routeConfig;
+    if (future.routeConfig !== curr.routeConfig) return false;
+    // Same route config but different params (e.g. navigating between dashboard UIDs)
+    // must NOT reuse, otherwise ngOnInit never fires for the new params.
+    return this.key(future) === this.key(curr);
   }
 }

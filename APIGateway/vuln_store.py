@@ -67,7 +67,6 @@ def _os_ensure_index(client) -> None:
                 "mappings": {
                     "properties": {
                         "scan_id":     {"type": "keyword"},
-                        "mfi":         {"type": "keyword"},
                         "quarter":     {"type": "keyword"},
                         "year":        {"type": "integer"},
                         "scan_type":   {"type": "keyword"},
@@ -119,10 +118,8 @@ def save_scan(client, scan: dict) -> None:
     _os_save(client, scan)
 
 
-def list_scans(client, mfi: str = None) -> list:
+def list_scans(client) -> list:
     index = _load_index()
-    if mfi:
-        index = [e for e in index if e.get("mfi") == mfi]
     index.sort(key=lambda e: (
         -e.get("year", 0),
         e.get("quarter", ""),
@@ -187,7 +184,7 @@ def update_scan_meta(client, scan_id: str, meta: dict) -> dict | None:
     with open(old_path, "r", encoding="utf-8") as f:
         scan = json.load(f)
 
-    for key in ("mfi", "branch", "quarter", "year", "scan_type"):
+    for key in ("branch", "quarter", "year", "scan_type"):
         if key in meta and meta[key] is not None:
             scan[key] = meta[key]
 
@@ -206,10 +203,10 @@ def update_scan_meta(client, scan_id: str, meta: dict) -> dict | None:
     return new_entry
 
 
-def get_scans_for_report(client, mfi: str, year: int, quarter: str) -> list:
+def get_scans_for_report(client, year: int, quarter: str) -> list:
     matching = [
         e for e in _load_index()
-        if e.get("mfi") == mfi and e.get("year") == year and e.get("quarter") == quarter
+        if e.get("year") == year and e.get("quarter") == quarter
     ]
     scans = []
     for entry in matching:
@@ -223,7 +220,6 @@ def get_scans_for_report(client, mfi: str, year: int, quarter: str) -> list:
 def get_trends(client) -> list:
     return [
         {
-            "mfi":       e["mfi"],
             "quarter":   e["quarter"],
             "year":      e["year"],
             "scan_type": e["scan_type"],

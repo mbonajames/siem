@@ -1,5 +1,10 @@
 <div class="gf-page">
 
+  <!-- Show spinner immediately while config is being fetched -->
+  @if (!config && loading) {
+    <div class="spinner-wrap"><mat-spinner diameter="32"></mat-spinner></div>
+  }
+
   <!-- Not configured banner -->
   @if (config && !config.configured) {
     <div class="not-configured">
@@ -57,6 +62,10 @@
       <button class="new-dash-btn" [class.active]="showCreate" (click)="toggleCreate()">
         <mat-icon>add</mat-icon>
         New Dashboard
+      </button>
+
+      <button class="refresh-btn" (click)="load()" [disabled]="loading" matTooltip="Refresh dashboards">
+        <mat-icon [class.spin-icon]="loading">refresh</mat-icon>
       </button>
     </div>
 
@@ -127,23 +136,58 @@
           </div>
           <div class="dash-grid">
             @for (d of byFolder(folder); track d.uid) {
-              <div class="dash-card" (click)="open(d)">
-                <div class="dash-card-top">
-                  <mat-icon class="dash-icon">insert_chart</mat-icon>
-                  <button class="external-btn" [matTooltip]="'Open in Grafana'"
-                    (click)="openInGrafana(d, $event)">
-                    <mat-icon>open_in_new</mat-icon>
-                  </button>
-                </div>
-                <div class="dash-title">{{ d.title }}</div>
-                @if (d.tags?.length) {
-                  <div class="dash-tags">
-                    @for (tag of d.tags; track tag) {
-                      <span class="dash-tag">{{ tag }}</span>
-                    }
+
+              <!-- Locked / access-denied card -->
+              @if (!d.accessible) {
+                <div class="dash-card dash-card--locked" [matTooltip]="'Shared by ' + (d.owner || 'another user')">
+                  <div class="dash-card-top">
+                    <mat-icon class="lock-icon">lock</mat-icon>
                   </div>
-                }
-              </div>
+                  <div class="dash-title locked-title">{{ d.title }}</div>
+                  <div class="access-denied-label">
+                    <mat-icon>block</mat-icon>
+                    Access Denied
+                  </div>
+                </div>
+              }
+
+              <!-- Normal accessible card -->
+              @if (d.accessible) {
+                <div class="dash-card" (click)="open(d)">
+                  <div class="dash-card-top">
+                    <mat-icon class="dash-icon">insert_chart</mat-icon>
+                    <div class="dash-card-actions">
+                      <!-- Open in Grafana -->
+                      <button class="card-action-btn external-btn" [matTooltip]="'Open in Grafana'"
+                        (click)="openInGrafana(d, $event)">
+                        <mat-icon>open_in_new</mat-icon>
+                      </button>
+                      <!-- Delete — owner only (or uncontrolled dashboards) -->
+                      @if (canDelete(d)) {
+                        <button class="card-action-btn delete-btn" matTooltip="Delete"
+                          (click)="deleteDashboard(d, $event)">
+                          <mat-icon>delete_outline</mat-icon>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                  <div class="dash-title">{{ d.title }}</div>
+                  @if (d.tags.length) {
+                    <div class="dash-tags">
+                      @for (tag of d.tags; track tag) {
+                        <span class="dash-tag">{{ tag }}</span>
+                      }
+                    </div>
+                  }
+                  @if (d.owner && !isOwner(d)) {
+                    <div class="shared-badge">
+                      <mat-icon>share</mat-icon>
+                      Shared with you
+                    </div>
+                  }
+                </div>
+              }
+
             }
           </div>
         </div>

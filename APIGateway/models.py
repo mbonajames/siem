@@ -84,3 +84,8 @@ class UpdateDashboardRequest(BaseModel):
 
 class ShareDashboardRequest(BaseModel):
     shared: bool
+
+# ── Grafana dashboard permissions ─────────────────────────────────────────────
+
+class ShareWithRequest(BaseModel):
+    shared_with: List[str]  # list of email addresses to share with

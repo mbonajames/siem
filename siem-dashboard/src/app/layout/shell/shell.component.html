@@ -11,7 +11,7 @@
   <mat-sidenav-content class="shell-content">
     <app-header (menuToggle)="toggleSidenav()" />
     <main class="main-content">
-      <router-outlet />
+      <router-outlet (activate)="onActivate($event)" (attach)="onActivate($event)" />
     </main>
   </mat-sidenav-content>
 </mat-sidenav-container>

@@ -1,0 +1,220 @@
+<div class="discover-shell">
+
+  <!-- ── Toolbar ─────────────────────────────────────────────────────────────── -->
+  <div class="discover-toolbar">
+
+    <div class="search-row">
+      <mat-icon class="search-icon">search</mat-icon>
+      <input class="dql-input" [(ngModel)]="customQuery"
+        (keyup.enter)="apply()"
+        placeholder="Lucene / DQL — e.g.  rule.groups:sophos AND rule.level:[7 TO 15]">
+      @if (customQuery) {
+        <button class="clear-btn" (click)="customQuery = ''; apply()" matTooltip="Clear">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+      <button class="apply-btn" (click)="apply()">Search</button>
+    </div>
+
+    <div class="filter-rows">
+
+      <div class="filter-row">
+        <span class="filter-label">Source</span>
+        @for (s of sources; track s.id) {
+          <button class="chip" [class.active]="activeSource === s.id"
+            [style.--chip-color]="s.color"
+            (click)="setSource(s.id)">
+            {{ s.label }}
+          </button>
+        }
+      </div>
+
+      <div class="filter-row">
+        <span class="filter-label">Time</span>
+        @for (t of timeRanges; track t.from) {
+          <button class="chip time-chip" [class.active]="activeTime === t.from"
+            (click)="setTime(t.from)">
+            {{ t.label }}
+          </button>
+        }
+        <div class="quick-wrap">
+          @for (q of quickSearches; track q.label) {
+            <button class="chip quick-chip" (click)="runQuick(q)"
+              [matTooltip]="q.query" matTooltipShowDelay="600">
+              <mat-icon>{{ q.icon }}</mat-icon>
+              {{ q.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Body (sidebar + results) ────────────────────────────────────────────── -->
+  <div class="discover-body">
+
+    <!-- Field Sidebar -->
+    <div class="field-sidebar" [class.collapsed]="sidebarCollapsed">
+
+      <div class="sidebar-head">
+        @if (!sidebarCollapsed) {
+          <span class="sidebar-title">Fields</span>
+        }
+        <button class="collapse-btn" (click)="sidebarCollapsed = !sidebarCollapsed"
+          [matTooltip]="sidebarCollapsed ? 'Expand fields' : 'Collapse fields'">
+          <mat-icon>{{ sidebarCollapsed ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+        </button>
+      </div>
+
+      @if (!sidebarCollapsed) {
+
+        <!-- Selected columns -->
+        <div class="sidebar-section">
+          <div class="section-hdr">
+            <span>Selected fields</span>
+            <button class="reset-btn" (click)="resetColumns()" matTooltip="Reset to defaults">
+              <mat-icon>restart_alt</mat-icon>
+            </button>
+          </div>
+          @for (col of selectedColumns; track col) {
+            <div class="field-item selected">
+              <span class="field-name" [matTooltip]="col" matTooltipShowDelay="800">{{ col }}</span>
+              <button class="field-action remove" (click)="removeColumn(col)" matTooltip="Remove column">
+                <mat-icon>remove</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- Available fields -->
+        <div class="sidebar-section grow">
+          <div class="section-hdr">
+            <span>Available fields</span>
+            @if (fieldsLoading) {
+              <mat-spinner diameter="12"></mat-spinner>
+            }
+          </div>
+
+          <div class="field-search-wrap">
+            <mat-icon class="field-search-icon">search</mat-icon>
+            <input class="field-search-input" [(ngModel)]="fieldSearch"
+              (ngModelChange)="applyFieldSearch()"
+              placeholder="Filter fields…">
+          </div>
+
+          <div class="field-list">
+            @for (f of availableFields; track f) {
+              <div class="field-item">
+                <span class="field-name" [matTooltip]="f" matTooltipShowDelay="800">{{ f }}</span>
+                <button class="field-action add" (click)="toggleField(f)" matTooltip="Add as column">
+                  <mat-icon>add</mat-icon>
+                </button>
+              </div>
+            }
+            @if (!fieldsLoading && availableFields.length === 0 && fieldSearch) {
+              <p class="field-empty">No fields match "{{ fieldSearch }}"</p>
+            }
+          </div>
+        </div>
+
+      }
+    </div>
+
+    <!-- Results pane -->
+    <div class="discover-content">
+
+      @if (loading) {
+        <div class="centered">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span class="loading-label">Searching…</span>
+        </div>
+
+      } @else if (error) {
+        <div class="centered">
+          <mat-icon class="err-icon">error_outline</mat-icon>
+          <p class="err-text">{{ error }}</p>
+          <button class="apply-btn" (click)="search()">Retry</button>
+        </div>
+
+      } @else {
+
+        <!-- Results bar -->
+        <div class="results-bar">
+          <span class="result-count">
+            @if ((result?.total ?? 0) === 0) {
+              No results
+            } @else {
+              {{ startIndex | number }}–{{ endIndex | number }} of
+              <strong>{{ result!.total | number }}</strong> events
+            }
+          </span>
+          <div class="pagination">
+            <button class="page-btn" (click)="prevPage()" [disabled]="page === 0">
+              <mat-icon>chevron_left</mat-icon>
+            </button>
+            <span class="page-info">{{ page + 1 }} / {{ totalPages }}</span>
+            <button class="page-btn" (click)="nextPage()" [disabled]="page >= totalPages - 1">
+              <mat-icon>chevron_right</mat-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        @if ((result?.hits?.length ?? 0) > 0) {
+          <div class="table-wrap">
+            <table class="evt-table">
+              <thead>
+                <tr>
+                  @for (col of selectedColumns; track col) {
+                    <th>{{ colLabel(col) }}</th>
+                  }
+                  <th class="col-expand"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (hit of result!.hits; track $index) {
+                  <tr class="evt-row" [class.expanded]="expandedRow === $index"
+                    (click)="toggleRow($index)">
+                    @for (col of selectedColumns; track col) {
+                      <td [class.cell-level]="col === 'rule.level'"
+                          [class.cell-ts]="col === '@timestamp'"
+                          [class.cell-agent]="col === 'agent.name'">
+                        @if (col === 'rule.level') {
+                          <span class="lvl-badge" [class]="levelClass(hit['rule']?.['level'])">
+                            {{ cellValue(hit, col) }}
+                          </span>
+                        } @else {
+                          {{ cellValue(hit, col) }}
+                        }
+                      </td>
+                    }
+                    <td class="col-expand">
+                      <mat-icon class="expand-icon">
+                        {{ expandedRow === $index ? 'expand_less' : 'expand_more' }}
+                      </mat-icon>
+                    </td>
+                  </tr>
+                  @if (expandedRow === $index) {
+                    <tr class="detail-row">
+                      <td [attr.colspan]="selectedColumns.length + 1">
+                        <pre class="raw-json">{{ json(hit) }}</pre>
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+
+        } @else if (!loading) {
+          <div class="centered">
+            <mat-icon>manage_search</mat-icon>
+            <p class="empty-text">No events matched your query for this time range.</p>
+          </div>
+        }
+      }
+    </div>
+
+  </div>
+</div>

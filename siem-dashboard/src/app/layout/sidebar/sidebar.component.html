@@ -5,54 +5,24 @@
     <img class="brand-logo"
          src="https://www.hopeinternational.org/assets/images/brand/HOPE_H_yellowgray_web.svg"
          alt="Hope International" />
-    <span class="brand-badge">SecOps</span>
   </div>
-
-  <!-- ── Org context pill ──────────────────────────────────────────────────── -->
-  @if (!orgService.isAll) {
-    <div class="org-context-pill">
-      <mat-icon class="org-ctx-icon">business</mat-icon>
-      <span class="org-ctx-name">{{ orgService.current.name }}</span>
-    </div>
-  }
 
   <!-- ── Navigation ────────────────────────────────────────────────────────── -->
   <nav class="sidebar-nav" aria-label="Main navigation">
-    @for (section of navSections; track section.label) {
-      <div class="nav-section">
-        <p class="nav-section-label">{{ section.label }}</p>
-        @for (item of section.items; track item.path) {
-          <a [routerLink]="item.path"
-             routerLinkActive="active"
-             class="nav-item"
-             [matTooltip]="item.label"
-             matTooltipPosition="right"
-             matTooltipShowDelay="600">
-            <mat-icon class="nav-icon">{{ item.icon }}</mat-icon>
-            <span class="nav-label">{{ item.label }}</span>
-            @if (item.badge) {
-              <span class="nav-badge">{{ item.badge }}</span>
-            }
-          </a>
-        }
-      </div>
-    }
-  </nav>
-
-  <!-- ── Footer ────────────────────────────────────────────────────────────── -->
-  <div class="sidebar-footer">
-    <nav aria-label="Account navigation">
-      <a routerLink="/settings"
+    @for (item of navItems; track item.label) {
+      <a [routerLink]="item.path"
          routerLinkActive="active"
          class="nav-item"
-         matTooltip="Recent Activity"
+         [matTooltip]="item.label"
          matTooltipPosition="right"
          matTooltipShowDelay="600">
-        <mat-icon class="nav-icon">history</mat-icon>
-        <span class="nav-label">Recent Activity</span>
+        <mat-icon class="nav-icon">{{ item.icon }}</mat-icon>
+        <span class="nav-label">{{ item.label }}</span>
+        @if (item.badge) {
+          <span class="nav-badge">{{ item.badge }}</span>
+        }
       </a>
-    </nav>
-    <div class="sidebar-version">Hope·Armor v2</div>
-  </div>
+    }
+  </nav>
 
 </aside>

@@ -15,7 +15,6 @@ import vuln_report_xlsx
 import vuln_report_pdf
 import connectors as _connectors
 from routers.alert_status  import create_router as _alert_status_router
-from routers.mitre         import create_router as _mitre_router
 from routers.saved_searches import create_router as _saved_searches_router
 from routers.notifications  import create_router as _notifications_router, notification_poller
 from opensearchpy.exceptions import ConnectionError as OSConnectionError, TransportError
@@ -28,10 +27,12 @@ from models import (
     InvestigateRequest, InvestigateResponse, AlertsPage,
     JiraTicketRequest, JiraBatchCheckRequest, JiraAssignRequest, NessusExportRequest,
     CreateDashboardRequest, UpdateDashboardRequest, ShareDashboardRequest,
+    ShareWithRequest,
 )
 from auth import get_current_user, require_role
 import custom_dashboards as cd
 import audit_log as al
+import dashboard_permissions as dp
 
 from investigation_querry import build_investigation_query
 from integrations.virustotal import lookup_ip, lookup_domain, lookup_hash, lookup_url, VirusTotalError
@@ -1865,18 +1866,25 @@ async def _start_jira_autoticket_poller():
 async def _register_feature_routers():
     """Register routers that need the indexer_client (available after module init)."""
     app.include_router(_alert_status_router(indexer_client))
-    app.include_router(_mitre_router(indexer_client))
     app.include_router(_saved_searches_router(indexer_client))
     app.include_router(_notifications_router(indexer_client))
     # Start Teams notification background poller
     asyncio.create_task(notification_poller(indexer_client))
-    log.info("Feature routers registered: alert-status, mitre, saved-searches, notifications")
+    log.info("Feature routers registered: alert-status, saved-searches, notifications")
 
 
 @app.on_event("startup")
 async def _init_dashboard_index():
     try:
         cd.ensure_index(indexer_client)
+    except Exception:
+        pass  # non-fatal if OpenSearch is temporarily unavailable
+
+
+@app.on_event("startup")
+async def _init_dashboard_permissions_index():
+    try:
+        dp.ensure_index(indexer_client)
     except Exception:
         pass  # non-fatal if OpenSearch is temporarily unavailable
 
@@ -2738,7 +2746,6 @@ async def _init_vuln_index():
 
 @app.post("/vuln/upload", status_code=201)
 async def vuln_upload(
-    mfi:       str        = Query(..., description="MFI name"),
     quarter:   str        = Query(..., description="Q1 | Q2 | Q3 | Q4"),
     year:      int        = Query(..., description="Assessment year, e.g. 2025"),
     scan_type: str        = Query("internal", description="internal | external"),
@@ -2757,6 +2764,7 @@ async def vuln_upload(
 
     content = await file.read()
     loop    = asyncio.get_running_loop()
+    mfi     = "Hope International"
 
     try:
         scan = await loop.run_in_executor(
@@ -2781,11 +2789,8 @@ async def vuln_upload(
 
 
 @app.get("/vuln/scans")
-def vuln_list_scans(
-    mfi:   Optional[str] = Query(None, description="Filter by MFI name"),
-    _user: dict           = Depends(get_current_user),
-):
-    return {"scans": vuln_store.list_scans(indexer_client, mfi)}
+def vuln_list_scans(_user: dict = Depends(get_current_user)):
+    return {"scans": vuln_store.list_scans(indexer_client)}
 
 
 @app.get("/vuln/scans/{scan_id}")
@@ -2808,7 +2813,7 @@ def vuln_update_scan(
     body:    dict = Body(...),
     _user:   dict = Depends(get_current_user),
 ):
-    allowed = {"mfi", "branch", "quarter", "year", "scan_type"}
+    allowed = {"branch", "quarter", "year", "scan_type"}
     meta    = {k: v for k, v in body.items() if k in allowed}
     updated = vuln_store.update_scan_meta(indexer_client, scan_id, meta)
     if updated is None:
@@ -2823,26 +2828,25 @@ def vuln_trends(_user: dict = Depends(get_current_user)):
 
 @app.get("/vuln/report/technical")
 def vuln_report_technical(
-    mfi:     str = Query(...),
     year:    int = Query(...),
     quarter: str = Query(...),
     _user:   dict = Depends(get_current_user),
 ):
-    scans = vuln_store.get_scans_for_report(indexer_client, mfi, year, quarter)
+    scans = vuln_store.get_scans_for_report(indexer_client, year, quarter)
     if not scans:
-        raise HTTPException(status_code=404, detail="No scans found for this MFI/year/quarter")
+        raise HTTPException(status_code=404, detail="No scans found for this year/quarter")
 
     internal = [s for s in scans if s.get("scan_type") == "internal"]
     external = [s for s in scans if s.get("scan_type") == "external"]
 
     try:
         xlsx_bytes = vuln_report_xlsx.generate_technical_xlsx(
-            mfi, year, quarter, internal, external
+            "Hope International", year, quarter, internal, external
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Report generation failed: {exc}")
 
-    safe_name = f"{mfi.replace(' ', '_')}_{quarter}_{year}_Technical.xlsx"
+    safe_name = f"{quarter}_{year}_Technical.xlsx"
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2852,26 +2856,25 @@ def vuln_report_technical(
 
 @app.get("/vuln/report/executive")
 def vuln_report_executive(
-    mfi:     str = Query(...),
     year:    int = Query(...),
     quarter: str = Query(...),
     _user:   dict = Depends(get_current_user),
 ):
-    scans = vuln_store.get_scans_for_report(indexer_client, mfi, year, quarter)
+    scans = vuln_store.get_scans_for_report(indexer_client, year, quarter)
     if not scans:
-        raise HTTPException(status_code=404, detail="No scans found for this MFI/year/quarter")
+        raise HTTPException(status_code=404, detail="No scans found for this year/quarter")
 
     internal = [s for s in scans if s.get("scan_type") == "internal"]
     external = [s for s in scans if s.get("scan_type") == "external"]
 
     try:
         pdf_bytes = vuln_report_pdf.generate_executive_pdf(
-            mfi, year, quarter, internal, external
+            "Hope International", year, quarter, internal, external
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Report generation failed: {exc}")
 
-    safe_name = f"{mfi.replace(' ', '_')}_{quarter}_{year}_Executive.pdf"
+    safe_name = f"{quarter}_{year}_Executive.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -2894,6 +2897,123 @@ async def test_connector(connector_id: str, _user: dict = Depends(get_current_us
     return result
 
 
+# ── Wazuh Dashboard (OpenSearch Dashboards) proxy ─────────────────────────────
+
+_WAZUH_DASHBOARD_URL = (os.getenv("WAZUH_DASHBOARD_URL") or "").rstrip("/")
+
+
+@app.get("/wazuh-dashboard/config")
+async def wazuh_dashboard_config(_user: dict = Depends(get_current_user)):
+    return {
+        "configured": bool(_WAZUH_DASHBOARD_URL),
+        "url":        _WAZUH_DASHBOARD_URL,
+    }
+
+
+# ── Discover (native log search via OpenSearch) ────────────────────────────────
+
+class DiscoverSearchRequest(BaseModel):
+    query:     str = ""
+    index:     str = "wazuh-alerts-4.x-*,siem-defender-*"
+    time_from: str = "now-24h"
+    size:      int = 50
+    offset:    int = 0
+
+
+@app.post("/discover/search")
+async def discover_search(body: DiscoverSearchRequest, _user: dict = Depends(get_current_user)):
+    must: list = []
+    if body.query.strip():
+        must.append({
+            "query_string": {
+                "query":            body.query,
+                "default_operator": "AND",
+                "analyze_wildcard": True,
+                "lenient":          True,
+            }
+        })
+    else:
+        must.append({"match_all": {}})
+
+    os_query = {
+        "query": {
+            "bool": {
+                "must":   must,
+                "filter": [
+                    {"range": {"@timestamp": {"gte": body.time_from, "lte": "now"}}}
+                ],
+            }
+        },
+        "sort":             [{"@timestamp": {"order": "desc"}}],
+        "size":             min(body.size, 200),
+        "from":             body.offset,
+        "track_total_hits": True,
+    }
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            lambda: indexer_client.search(
+                index=body.index,
+                ignore_unavailable=True,
+                body=os_query,
+            ),
+        )
+    except Exception as exc:
+        log.exception("Discover search failed: %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    hits_data = result.get("hits", {})
+    total     = hits_data.get("total", {})
+    if isinstance(total, dict):
+        total = total.get("value", 0)
+
+    return {
+        "total": total,
+        "hits":  [h["_source"] for h in hits_data.get("hits", [])],
+    }
+
+
+def _extract_field_names(props: dict, prefix: str, out: set, depth: int = 0) -> None:
+    if depth > 6:
+        return
+    for name, meta in props.items():
+        full = f"{prefix}.{name}" if prefix else name
+        if meta.get("type"):
+            out.add(full)
+        if "properties" in meta:
+            _extract_field_names(meta["properties"], full, out, depth + 1)
+        if "fields" in meta:
+            # keyword sub-fields — skip (e.g. agent.name.keyword)
+            pass
+
+
+@app.get("/discover/fields")
+async def discover_fields(
+    index: str = Query("wazuh-alerts-4.x-*,siem-defender-*"),
+    _user: dict = Depends(get_current_user),
+):
+    loop = asyncio.get_event_loop()
+    try:
+        mapping = await loop.run_in_executor(
+            None,
+            lambda: indexer_client.indices.get_mapping(
+                index=index, ignore_unavailable=True
+            ),
+        )
+    except Exception as exc:
+        log.exception("Discover fields failed: %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    fields: set = set()
+    for _idx, idx_data in mapping.items():
+        props = idx_data.get("mappings", {}).get("properties", {})
+        _extract_field_names(props, "", fields)
+
+    return {"fields": sorted(fields)}
+
+
 # ── Grafana proxy ──────────────────────────────────────────────────────────────
 
 def _grafana_unavailable():
@@ -2910,10 +3030,11 @@ def grafana_config(_user: dict = Depends(get_current_user)):
 
 @app.get("/grafana/dashboards")
 async def grafana_list_dashboards(
-    q:      str = Query("",  description="Search query"),
-    folder: str = Query("",  description="Folder UID filter"),
-    limit:  int = Query(200, ge=1, le=1000),
-    _user:  dict = Depends(get_current_user),
+    request: Request,
+    q:       str = Query("",  description="Search query"),
+    folder:  str = Query("",  description="Folder UID filter"),
+    limit:   int = Query(200, ge=1, le=1000),
+    user:    dict = Depends(get_current_user),
 ):
     if not _GRAFANA_URL or not _GRAFANA_API_KEY:
         raise _grafana_unavailable()
@@ -2925,7 +3046,8 @@ async def grafana_list_dashboards(
             r = await c.get(f"{_GRAFANA_URL}/api/search", headers=_grafana_headers(), params=params)
         if not r.is_success:
             raise HTTPException(status_code=502, detail=f"Grafana error: HTTP {r.status_code}")
-        return r.json()
+        caller = _owner(user, request)
+        return await asyncio.to_thread(dp.enrich_dashboards, indexer_client, r.json(), caller)
     except httpx.RequestError as exc:
         log.exception("Grafana /api/search failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
@@ -2946,9 +3068,15 @@ async def grafana_list_folders(_user: dict = Depends(get_current_user)):
 
 
 @app.get("/grafana/dashboards/{uid}")
-async def grafana_get_dashboard(uid: str, _user: dict = Depends(get_current_user)):
+async def grafana_get_dashboard(uid: str, request: Request, user: dict = Depends(get_current_user)):
     if not _GRAFANA_URL or not _GRAFANA_API_KEY:
         raise _grafana_unavailable()
+    caller = _owner(user, request)
+    perm = dp.get_permission(indexer_client, uid)
+    if perm is not None:
+        owner = perm.get("owner", "")
+        if owner != caller and caller not in perm.get("shared_with", []):
+            raise HTTPException(status_code=403, detail="You do not have access to this dashboard")
     try:
         async with httpx.AsyncClient(timeout=10, verify=False) as c:
             r = await c.get(f"{_GRAFANA_URL}/api/dashboards/uid/{uid}", headers=_grafana_headers())
@@ -2956,35 +3084,56 @@ async def grafana_get_dashboard(uid: str, _user: dict = Depends(get_current_user
             raise HTTPException(status_code=404, detail="Dashboard not found")
         if not r.is_success:
             raise HTTPException(status_code=502, detail=f"Grafana error: HTTP {r.status_code}")
-        return r.json()
+        data = r.json()
+        if perm is not None:
+            data["siem_owner"] = perm.get("owner")
+            data["siem_shared_with"] = perm.get("shared_with", [])
+        return data
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
 
 
 @app.post("/grafana/dashboards", status_code=200)
-async def grafana_create_dashboard(payload: dict = Body(...), _user: dict = Depends(get_current_user)):
+async def grafana_create_dashboard(
+    request: Request,
+    payload: dict = Body(...),
+    user:    dict = Depends(get_current_user),
+):
     """
     Create or overwrite a Grafana dashboard.
     Payload: { dashboard: {...}, folderId?: int, folderUid?: str, overwrite?: bool, message?: str }
     Set dashboard.id=null / dashboard.uid=null for new; supply uid to update existing.
+    New dashboards are registered in the permissions index with the caller as owner.
     """
     if not _GRAFANA_URL or not _GRAFANA_API_KEY:
         raise _grafana_unavailable()
+    caller = _owner(user, request)
+    is_new = not (payload.get("dashboard") or {}).get("uid")
     try:
         async with httpx.AsyncClient(timeout=15, verify=False) as c:
             r = await c.post(f"{_GRAFANA_URL}/api/dashboards/db",
                              headers=_grafana_headers(), json=payload)
         if not r.is_success:
             raise HTTPException(status_code=r.status_code, detail=r.json())
-        return r.json()
+        result = r.json()
+        if is_new and result.get("uid"):
+            try:
+                dp.register_dashboard(indexer_client, result["uid"], caller)
+            except Exception:
+                pass  # non-fatal; dashboard still created in Grafana
+        return result
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
 
 
 @app.delete("/grafana/dashboards/{uid}", status_code=200)
-async def grafana_delete_dashboard(uid: str, _user: dict = Depends(get_current_user)):
+async def grafana_delete_dashboard(uid: str, request: Request, user: dict = Depends(get_current_user)):
     if not _GRAFANA_URL or not _GRAFANA_API_KEY:
         raise _grafana_unavailable()
+    caller = _owner(user, request)
+    perm = dp.get_permission(indexer_client, uid)
+    if perm is not None and perm.get("owner") != caller:
+        raise HTTPException(status_code=403, detail="Only the owner can delete this dashboard")
     try:
         async with httpx.AsyncClient(timeout=10, verify=False) as c:
             r = await c.delete(f"{_GRAFANA_URL}/api/dashboards/uid/{uid}",
@@ -2993,9 +3142,40 @@ async def grafana_delete_dashboard(uid: str, _user: dict = Depends(get_current_u
             raise HTTPException(status_code=404, detail="Dashboard not found")
         if not r.is_success:
             raise HTTPException(status_code=r.status_code, detail=r.json())
+        dp.delete_permission(indexer_client, uid)
         return r.json()
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"Cannot reach Grafana: {exc}")
+
+
+@app.patch("/grafana/dashboards/{uid}/share", status_code=200)
+async def grafana_share_dashboard(
+    uid:     str,
+    request: Request,
+    req:     ShareWithRequest,
+    user:    dict = Depends(get_current_user),
+):
+    """Update the list of users this dashboard is shared with. Owner only."""
+    caller = _owner(user, request)
+    perm = dp.get_permission(indexer_client, uid)
+    if perm is None:
+        # Uncontrolled (Grafana-native) dashboard — register the caller as owner first
+        dp.register_dashboard(indexer_client, uid, caller)
+        perm = {"owner": caller, "shared_with": []}
+    if perm.get("owner") != caller:
+        raise HTTPException(status_code=403, detail="Only the owner can change sharing")
+    dp.update_shared_with(indexer_client, uid, req.shared_with)
+    return {"uid": uid, "owner": caller, "shared_with": list(set(req.shared_with))}
+
+
+@app.get("/users")
+def list_users(
+    q:     str = Query("", description="Search query for email"),
+    limit: int = Query(25, ge=1, le=100),
+    _user: dict = Depends(get_current_user),
+):
+    """Return known user emails from audit logs — used by the share dialog."""
+    return {"users": dp.get_known_users(indexer_client, q=q, limit=limit)}
 
 
 @app.post("/grafana/folders", status_code=200)

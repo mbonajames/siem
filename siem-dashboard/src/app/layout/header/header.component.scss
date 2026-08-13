@@ -5,7 +5,7 @@
   padding: 0 14px 0 12px;
   height: 56px;
   background: var(--siem-surface);
-  border-bottom: 1px solid var(--siem-border-subtle);
+  border-bottom: 1px solid rgba(26,58,92,.1);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -44,60 +44,6 @@
   font-weight: 600;
   color: var(--siem-text-primary);
   letter-spacing: -0.1px;
-}
-
-// ── Org switcher ──────────────────────────────────────────────────────────────
-.org-switcher {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px 4px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--siem-border);
-  background: var(--siem-surface-elevated);
-  color: var(--siem-text-secondary);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  transition: border-color .15s, color .15s, background .15s;
-  white-space: nowrap;
-
-  &:hover {
-    border-color: rgba(244,106,31,.5);
-    color: var(--siem-text-primary);
-    background: rgba(244,106,31,.06);
-
-    .org-sw-icon { color: var(--hope-orange); }
-  }
-}
-
-.org-sw-icon {
-  font-size: 14px;
-  width: 14px;
-  height: 14px;
-  color: var(--siem-text-faint);
-  transition: color .15s;
-}
-
-.org-sw-name {
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.org-sw-caret {
-  font-size: 14px;
-  width: 14px;
-  height: 14px;
-  color: var(--siem-text-faint);
-  margin-left: 1px;
-}
-
-// ── Org menu items ────────────────────────────────────────────────────────────
-.org-menu-item {
-  font-size: 13px !important;
-  &.selected { color: var(--hope-orange) !important; }
 }
 
 // ── Right ─────────────────────────────────────────────────────────────────────
@@ -182,9 +128,9 @@
   font-weight: 700;
   letter-spacing: .5px;
   text-transform: uppercase;
-  background: rgba(88,166,255,.12);
-  color: var(--siem-info);
-  border: 1px solid rgba(88,166,255,.2);
+  background: #E8EEF4;
+  color: #1A3A5C;
+  border: 1px solid rgba(26,58,92,.2);
 
   &.admin {
     background: rgba(244,106,31,.12);

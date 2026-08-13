@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
@@ -60,10 +60,15 @@ export class IdentityComponent implements OnInit, AfterViewInit {
   constructor(
     private identity: IdentityService,
     private snackBar: MatSnackBar,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
     this.loadData();
+  }
+
+  onReuse(): void {
+    if (!this.usersDataSource.data.length || this.loading) this.loadData();
   }
 
   ngAfterViewInit(): void {
@@ -91,8 +96,9 @@ export class IdentityComponent implements OnInit, AfterViewInit {
         };
         this.applyUserFilter();
         this.loading = false;
+        this.cdr.detectChanges();
       },
-      error: () => { this.loading = false; }
+      error: () => { this.loading = false; this.cdr.detectChanges(); }
     });
   }
 

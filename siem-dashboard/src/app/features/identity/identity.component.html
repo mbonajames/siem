@@ -8,9 +8,7 @@
 
   <div class="stats-grid">
     <app-stat-card label="High Risk Users" [value]="stats.high" icon="person_alert" severity="critical" />
-    <app-stat-card label="Medium Risk Users" [value]="stats.medium" icon="warning" severity="medium" />
-    <app-stat-card label="Low Risk Users" [value]="stats.low" icon="info" severity="low" />
-    <app-stat-card label="At-Risk Sign-Ins" [value]="stats.atRiskSignIns" icon="login" severity="medium" />
+    <app-stat-card label="Risky Sign-Ins" [value]="stats.atRiskSignIns" icon="login" severity="critical" />
   </div>
 
   @if (loading) {

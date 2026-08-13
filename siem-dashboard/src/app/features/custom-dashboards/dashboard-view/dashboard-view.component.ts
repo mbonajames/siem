@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -7,7 +7,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { GrafanaService, GrafanaConfig } from '../../../core/services/grafana.service';
+import { ApiService } from '../../../core/services/api.service';
 
 @Component({
   selector: 'app-dashboard-view',
@@ -19,13 +22,17 @@ import { GrafanaService, GrafanaConfig } from '../../../core/services/grafana.se
   templateUrl: './dashboard-view.component.html',
   styleUrl: './dashboard-view.component.scss',
 })
-export class DashboardViewComponent implements OnInit {
-  config:    GrafanaConfig | null = null;
-  meta:      any = null;
-  iframeSrc: SafeResourceUrl | null = null;
-  loading    = true;
-  deleting   = false;
-  editMode   = false;
+export class DashboardViewComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+  config:      GrafanaConfig | null = null;
+  meta:        any = null;
+  iframeSrc:   SafeResourceUrl | null = null;
+  loading      = true;
+  deleting     = false;
+  editMode     = false;
+  accessDenied = false;
+  isOwner      = false;
+  currentUser  = '';
 
   uid = '';
 
@@ -42,27 +49,66 @@ export class DashboardViewComponent implements OnInit {
     private route:     ActivatedRoute,
     private router:    Router,
     private grafana:   GrafanaService,
+    private api:       ApiService,
     private sanitizer: DomSanitizer,
     private snack:     MatSnackBar,
+    private cdr:       ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
     this.uid      = this.route.snapshot.paramMap.get('id') ?? '';
     this.editMode = this.route.snapshot.queryParamMap.get('edit') === '1';
-    this.grafana.getConfig().subscribe({
-      next: cfg => {
-        this.config = cfg;
-        if (!cfg.configured) { this.loading = false; return; }
-        this.loadMeta();
-      },
-      error: () => { this.loading = false; },
-    });
+    this.api.get<{ email: string }>('/auth/me')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next:  me  => { this.currentUser = me.email ?? ''; this.cdr.detectChanges(); },
+        error: ()  => {},
+      });
+    this.grafana.getConfig()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: cfg => {
+          this.config = cfg;
+          if (!cfg.configured) { this.loading = false; this.cdr.detectChanges(); return; }
+          this.loadMeta();
+        },
+        error: () => { this.loading = false; this.cdr.detectChanges(); },
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  // Called by ShellComponent when this component is re-activated via KEEP_ALIVE.
+  onReuse(): void {
+    if (this.config?.configured && (!this.iframeSrc || this.loading)) {
+      this.loading = true;
+      this.iframeSrc = null;
+      this.loadMeta();
+    }
   }
 
   loadMeta(): void {
-    this.grafana.getDashboard(this.uid).subscribe({
-      next:  d  => { this.meta = d; this.loading = false; this.buildIframe(); },
-      error: () => { this.loading = false; this.buildIframe(); },
+    this.grafana.getDashboard(this.uid).pipe(takeUntil(this.destroy$)).subscribe({
+      next: d => {
+        this.meta    = d;
+        this.loading = false;
+        const owner  = d.siem_owner ?? null;
+        this.isOwner = !!owner && !!this.currentUser && owner === this.currentUser;
+        this.buildIframe();
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.loading = false;
+        if (err?.status === 403) {
+          this.accessDenied = true;
+        } else {
+          this.buildIframe();
+        }
+        this.cdr.detectChanges();
+      },
     });
   }
 
@@ -97,6 +143,7 @@ export class DashboardViewComponent implements OnInit {
       error: err => {
         this.deleting = false;
         this.snack.open(err?.error?.detail ?? 'Delete failed', 'Dismiss', { duration: 6000 });
+        this.cdr.detectChanges();
       },
     });
   }

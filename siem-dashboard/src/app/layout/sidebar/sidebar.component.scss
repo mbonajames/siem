@@ -16,7 +16,7 @@
   align-items: center;
   gap: 10px;
   padding: 18px 16px 16px;
-  border-bottom: 1px solid var(--siem-border-subtle);
+  border-bottom: 1px solid rgba(255,255,255,.1);
   flex-shrink: 0;
 
   .brand-logo {
@@ -24,6 +24,7 @@
     width: auto;
     object-fit: contain;
     flex-shrink: 0;
+    filter: brightness(0) invert(1);
   }
 
   .brand-badge {
@@ -40,82 +41,37 @@
   }
 }
 
-// ── Org context pill ──────────────────────────────────────────────────────────
-.org-context-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 10px 4px;
-  padding: 5px 10px;
-  background: rgba(244,106,31,.08);
-  border: 1px solid rgba(244,106,31,.18);
-  border-radius: 6px;
-
-  .org-ctx-icon {
-    font-size: 13px;
-    width: 13px;
-    height: 13px;
-    color: var(--hope-orange);
-    flex-shrink: 0;
-  }
-
-  .org-ctx-name {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--hope-orange);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-
 // ── Navigation ────────────────────────────────────────────────────────────────
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
-}
-
-.nav-section {
-  padding: 0 10px;
-  margin-bottom: 4px;
-
-  &:not(:last-child) { margin-bottom: 8px; }
-}
-
-.nav-section-label {
-  margin: 8px 6px 4px;
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--siem-text-faint);
+  padding: 6px 10px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 7px;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 6px;
   margin-bottom: 1px;
   cursor: pointer;
   text-decoration: none;
-  color: var(--siem-text-secondary);
+  color: rgba(255,255,255,.65);
   border-left: 2px solid transparent;
   transition: background .12s ease, color .12s ease, border-color .12s ease;
 
   &:hover:not(.active) {
     background: rgba(255,255,255,.05);
-    color: var(--siem-text-primary);
+    color: #fff;
     border-left-color: rgba(255,255,255,.08);
 
-    .nav-icon { color: var(--siem-text-primary); }
+    .nav-icon { color: #fff; }
   }
 
   &.active {
     background: rgba(244,106,31,.09);
-    color: #f0a070;
+    color: #fff;
     border-left-color: var(--hope-orange);
 
     .nav-icon { color: var(--hope-orange); }
@@ -124,17 +80,17 @@
 }
 
 .nav-icon {
-  font-size: 17px;
-  width: 17px;
-  height: 17px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  color: var(--siem-text-faint);
+  color: rgba(255,255,255,.45);
   transition: color .12s ease;
 }
 
 .nav-label {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -160,7 +116,7 @@
 .sidebar-footer {
   flex-shrink: 0;
   padding: 0 10px 10px;
-  border-top: 1px solid var(--siem-border-subtle);
+  border-top: 1px solid rgba(255,255,255,.1);
   padding-top: 6px;
 }
 

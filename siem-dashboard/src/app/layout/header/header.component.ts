@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
@@ -9,27 +9,22 @@ import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { GatewayService } from '../../core/services/gateway.service';
-import { OrgService } from '../../core/services/org.service';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 const PAGE_TITLES: Record<string, { title: string; icon: string }> = {
   '/dashboard':        { title: 'Security Overview',       icon: 'shield'                   },
-  '/alerts':           { title: 'Alerts & Investigation',  icon: 'warning_amber'             },
-  '/correlation':      { title: 'Correlation',             icon: 'hub'                      },
-  '/identity':         { title: 'Identity & Risk',         icon: 'manage_accounts'           },
+  '/alerts':           { title: 'Alerts Investigation',    icon: 'warning_amber'             },
+  '/identity':         { title: 'Identity Management',     icon: 'manage_accounts'           },
   '/devices':          { title: 'Endpoint Security',       icon: 'devices'                  },
   '/network-security': { title: 'Network Security',        icon: 'wifi_tethering_error'     },
   '/email-security':   { title: 'Email Security',          icon: 'mark_email_unread'        },
-  '/nessus':           { title: 'Vulnerability Scan',      icon: 'radar'                    },
-  '/vulnerabilities':  { title: 'Threat Coverage',         icon: 'security_update_warning'  },
-  '/rules':            { title: 'Detection Rules',         icon: 'policy'                   },
-  '/my-dashboards':    { title: 'Dashboard Builder',       icon: 'dashboard_customize'      },
-  '/jira':             { title: 'JIRA Tickets',            icon: 'confirmation_number'      },
+  '/nessus':           { title: 'Vulnerability Detection', icon: 'radar'                    },
+  '/my-dashboards':    { title: 'Visualizations',          icon: 'dashboard_customize'      },
+  '/jira':             { title: 'Cases',                   icon: 'confirmation_number'      },
   '/connectors':       { title: 'Connectors',              icon: 'cable'                    },
-  '/mitre':            { title: 'MITRE ATT&CK Coverage',   icon: 'grid_view'                },
-  '/threat-hunting':   { title: 'Threat Hunting',          icon: 'manage_search'            },
-  '/settings':         { title: 'Recent Activity',         icon: 'history'                  },
+  '/discover':         { title: 'Explore',                 icon: 'travel_explore'           },
+  '/settings':         { title: 'Recent Activities',       icon: 'history'                  },
 };
 
 @Component({
@@ -42,10 +37,10 @@ const PAGE_TITLES: Record<string, { title: string; icon: string }> = {
 export class HeaderComponent implements OnInit, OnDestroy {
   @Output() menuToggle = new EventEmitter<void>();
 
-  readonly auth       = inject(AuthService);
-  readonly gateway    = inject(GatewayService);
-  readonly router     = inject(Router);
-  readonly orgService = inject(OrgService);
+  readonly auth    = inject(AuthService);
+  readonly gateway = inject(GatewayService);
+  readonly router  = inject(Router);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   notificationCount = 0;
   currentPageTitle  = 'Security Overview';
@@ -68,11 +63,17 @@ export class HeaderComponent implements OnInit, OnDestroy {
     if (this.pollTimer) clearInterval(this.pollTimer);
   }
 
+  // Called by ShellComponent on every (activate) event so the title is always current.
+  syncTitle(url: string): void {
+    this.updatePageMeta(url);
+  }
+
   private updatePageMeta(url: string): void {
     const key = Object.keys(PAGE_TITLES).find(k => url.startsWith(k));
     const meta = key ? PAGE_TITLES[key] : { title: 'Hope-Armor SIEM', icon: 'security' };
     this.currentPageTitle = meta.title;
     this.currentPageIcon  = meta.icon;
+    this.cdr.detectChanges();
   }
 
   private fetchNotificationCount(): void {
@@ -80,6 +81,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
       next: stats => {
         const sev = stats.by_severity ?? {};
         this.notificationCount = (sev['Critical'] ?? 0) + (sev['High'] ?? 0);
+        this.cdr.detectChanges();
       },
       error: () => {},
     });

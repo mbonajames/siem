@@ -91,15 +91,6 @@ CONNECTORS = [
         "color":       "#ef4444",
     },
     {
-        "id":          "misp",
-        "name":        "MISP",
-        "category":    "Threat Intel",
-        "description": "Open-source threat intelligence platform and IOC matching",
-        "env_keys":    ["MISP_URL", "MISP_KEY"],
-        "icon":        "hub",
-        "color":       "#fb923c",
-    },
-    {
         "id":          "jira",
         "name":        "JIRA",
         "category":    "Ticketing",
@@ -287,20 +278,6 @@ async def _check_virustotal() -> dict:
         return {"status": "disconnected", "detail": str(exc)}
 
 
-async def _check_misp() -> dict:
-    url = os.getenv("MISP_URL", "").rstrip("/")
-    key = os.getenv("MISP_KEY", "")
-    if not (url and key):
-        return {"status": "not_configured", "detail": "URL or key missing"}
-    try:
-        async with httpx.AsyncClient(verify=False, timeout=8,
-                                     headers={"Authorization": key, "Accept": "application/json"}) as c:
-            r = await c.get(f"{url}/servers/getVersion")
-        if r.status_code == 200:
-            return {"status": "connected", "detail": f"v{r.json().get('version', '?')}"}
-        return {"status": "disconnected", "detail": f"HTTP {r.status_code}"}
-    except Exception as exc:
-        return {"status": "disconnected", "detail": str(exc)}
 
 
 async def _check_grafana() -> dict:
@@ -344,7 +321,6 @@ _HEALTH_CHECKS = {
     "entra-id":   _check_defender,   # same Azure app credentials
     "nessus":     _check_nessus,
     "virustotal": _check_virustotal,
-    "misp":       _check_misp,
     "jira":       _check_jira,
     "grafana":    _check_grafana,
     "darktrace":  _check_opensearch, # Darktrace events come via OpenSearch

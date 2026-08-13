@@ -13,25 +13,6 @@
     </div>
   </div>
 
-  <!-- ── Centre: Org switcher ────────────────────────────────────────────── -->
-  <button class="org-switcher" [matMenuTriggerFor]="orgMenu"
-          matTooltip="Switch organization context" matTooltipShowDelay="600">
-    <mat-icon class="org-sw-icon">business</mat-icon>
-    <span class="org-sw-name">{{ orgService.current.shortName }}</span>
-    <mat-icon class="org-sw-caret">expand_more</mat-icon>
-  </button>
-
-  <mat-menu #orgMenu="matMenu" class="org-menu">
-    @for (org of orgService.orgs; track org.id) {
-      <button mat-menu-item class="org-menu-item"
-              [class.selected]="orgService.orgId === org.id"
-              (click)="orgService.setOrg(org.id)">
-        <mat-icon>{{ orgService.orgId === org.id ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
-        <span>{{ org.name }}</span>
-      </button>
-    }
-  </mat-menu>
-
   <!-- ── Right: actions + user ───────────────────────────────────────────── -->
   <div class="header-right">
 

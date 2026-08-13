@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -22,9 +22,11 @@ interface SevBar  { label: string; count: number; color: string; pct: number; }
 export class DashboardComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
-  loading = false;
-  now     = new Date();
-  range    = '24h';
+  loading       = false;
+  chartsLoading = false;
+  now           = new Date();
+  range         = '24h';
+  private _lastStats: AlertStats | null = null;
 
   // Tiles — from /stats (accurate counts over full index)
   stats = { critical: 0, high: 0, medium: 0, low: 0, total: 0, iocCount: 0 };
@@ -101,7 +103,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private rangeToHours(): number { return this.currentHours; }
 
-  constructor(private gateway: GatewayService, private snackBar: MatSnackBar) {}
+  constructor(private gateway: GatewayService, private snackBar: MatSnackBar, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.load();
@@ -115,30 +117,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   setRange(r: string): void { this.range = r; this.load(); }
 
-  load(): void {
-    this.loading = true;
-    const hours  = this.rangeToHours();
+  onReuse(): void {
+    if (!this._lastStats || this.loading) this.load();
+  }
 
+  load(): void {
+    this.loading       = true;
+    this.chartsLoading = true;
+    const hours        = this.rangeToHours();
+
+    // Fast path: aggregated stats → reveals the page immediately (~1s)
+    this.gateway.getStats(hours)
+      .pipe(catchError(() => of(null)), takeUntil(this.destroy$))
+      .subscribe({
+        next: s => {
+          this._lastStats = s as AlertStats | null;
+          try {
+            if (s) this.processStats(s as AlertStats);
+          } catch { /* stats parse error — loading still clears */ }
+          this.loading = false;
+          this.cdr.detectChanges();
+        },
+        error: () => { this.loading = false; this.cdr.detectChanges(); },
+      });
+
+    // Slow path: event samples for charts/lists — fills in independently
     forkJoin({
-      stats:      this.gateway.getStats(hours).pipe(catchError(() => of(null))),
-      page:       this.gateway.getAlerts({ limit: 200, hours }).pipe(catchError(() => of(null))),
-      sophos:     this.gateway.getAlerts({ source: 'sophos-central', limit: 200, hours }).pipe(catchError(() => of(null))),
-      defender:   this.gateway.getAlerts({ source: 'ms-defender',    limit: 200, hours }).pipe(catchError(() => of(null))),
-      darktrace:  this.gateway.getAlerts({ source: 'darktrace',      limit: 200, hours }).pipe(catchError(() => of(null))),
-    }).subscribe({
-      next: ({ stats, page, sophos, defender, darktrace }) => {
-        this.processEvents((page       as AlertsPage | null)?.events ?? []);
-        this.processSophosEvents((sophos     as AlertsPage | null)?.events ?? []);
-        this.processDefenderEvents((defender   as AlertsPage | null)?.events ?? []);
-        this.processDarktraceEvents((darktrace  as AlertsPage | null)?.events ?? []);
-        if (stats) this.processStats(stats);   // runs last — accurate aggs override sample-based bars
-        this.loading = false;
+      page:      this.gateway.getAlerts({ limit: 200, hours }).pipe(catchError(() => of(null))),
+      sophos:    this.gateway.getAlerts({ source: 'sophos-central', limit: 200, hours }).pipe(catchError(() => of(null))),
+      defender:  this.gateway.getAlerts({ source: 'ms-defender',    limit: 200, hours }).pipe(catchError(() => of(null))),
+      darktrace: this.gateway.getAlerts({ source: 'darktrace',      limit: 200, hours }).pipe(catchError(() => of(null))),
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: ({ page, sophos, defender, darktrace }) => {
+        try {
+          this.processEvents((page       as AlertsPage | null)?.events ?? []);
+          this.processSophosEvents((sophos     as AlertsPage | null)?.events ?? []);
+          this.processDefenderEvents((defender   as AlertsPage | null)?.events ?? []);
+          this.processDarktraceEvents((darktrace  as AlertsPage | null)?.events ?? []);
+          if (this._lastStats) this.processStats(this._lastStats);
+        } catch { /* event parse error — charts loading still clears */ }
+        this.chartsLoading = false;
+        this.cdr.detectChanges();
       },
-      error: (err) => {
-        this.loading = false;
-        const msg = err?.error?.detail ?? err?.message ?? 'Failed to reach the API Gateway.';
-        this.snackBar.open(msg, 'Dismiss', { duration: 10000, panelClass: 'snack-error' });
-      }
+      error: () => { this.chartsLoading = false; this.cdr.detectChanges(); },
     });
 
     // Endpoint health runs separately — Sophos API can be slow, don't block main data
@@ -148,6 +169,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe(h => {
         this.sophosHealth        = h as SophosEndpointHealth | null;
         this.sophosHealthLoading = false;
+        this.cdr.detectChanges();
       });
   }
 

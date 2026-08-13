@@ -64,6 +64,10 @@ export class TicketsComponent implements OnInit, OnDestroy {
     clearTimeout(this.toastTimer);
   }
 
+  onReuse(): void {
+    if (!this.issues.length || this.loading) this.load();
+  }
+
   // ── Ticket list ─────────────────────────────────────────────────────────────
 
   load(): void {

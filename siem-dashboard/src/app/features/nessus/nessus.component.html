@@ -1,6 +1,6 @@
 <div class="nessus-page">
 
-  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <!-- ── Header ──────────────────────────────────────────────────────────────── -->
   <div class="page-header">
     <div class="header-left">
       <mat-icon class="header-icon">security</mat-icon>
@@ -21,7 +21,7 @@
     </div>
   </div>
 
-  <!-- ── Upload panel ────────────────────────────────────────────────────── -->
+  <!-- ── Upload panel ────────────────────────────────────────────────────────── -->
   @if (showUpload) {
     <div class="upload-card">
       <div class="upload-card-head">
@@ -29,12 +29,6 @@
         <button class="btn-close-sm" (click)="showUpload = false"><mat-icon>close</mat-icon></button>
       </div>
       <div class="upload-grid">
-        <div class="form-field">
-          <label>MFI</label>
-          <select [(ngModel)]="uploadMfi">
-            @for (m of mfiList; track m) { <option [value]="m">{{ m }}</option> }
-          </select>
-        </div>
         <div class="form-field">
           <label>Quarter</label>
           <select [(ngModel)]="uploadQ">
@@ -53,7 +47,7 @@
           </select>
         </div>
         <div class="form-field col-span-3">
-          <label>Branch / Office <span class="field-optional">(optional — used when multiple branches exist for the same MFI)</span></label>
+          <label>Branch / Office <span class="field-optional">(optional)</span></label>
           <input type="text" [(ngModel)]="uploadBranch" placeholder="e.g. Kigali Branch, Musanze Office…">
         </div>
         <div class="form-field full-width">
@@ -90,17 +84,15 @@
     </div>
   }
 
-  <!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
+  <!-- ── Tab bar ─────────────────────────────────────────────────────────────── -->
   <div class="tab-bar">
     <button class="tab-btn" [class.active]="activeTab === 'scans'"    (click)="openTab('scans')">
       <mat-icon>folder_open</mat-icon> Scans ({{ scanGroups.length }})
     </button>
     <button class="tab-btn" [class.active]="activeTab === 'analysis'" (click)="openTab('analysis')">
       <mat-icon>bug_report</mat-icon> Analysis
-      @if (analysisMode === 'mfi' && mfiGroup) {
-        <span class="tab-badge">{{ mfiGroup.mfi }} {{ mfiGroup.quarter }} {{ mfiGroup.year }} · All</span>
-      } @else if (analysisMode === 'single' && selectedScan) {
-        <span class="tab-badge">{{ selectedScan.mfi }} {{ selectedScan.quarter }} {{ selectedScan.year }}</span>
+      @if (selectedScan) {
+        <span class="tab-badge">{{ selectedScan.quarter }} {{ selectedScan.year }}</span>
       }
     </button>
     <button class="tab-btn" [class.active]="activeTab === 'trends'"   (click)="openTab('trends')">
@@ -113,10 +105,6 @@
 
     <!-- Filters -->
     <div class="filter-bar">
-      <select class="filter-select" [(ngModel)]="filterMfi">
-        <option value="">All MFIs</option>
-        @for (m of uniqueMfis; track m) { <option [value]="m">{{ m }}</option> }
-      </select>
       <select class="filter-select" [(ngModel)]="filterQ">
         <option value="">All Quarters</option>
         @for (q of quarters; track q) { <option [value]="q">{{ q }}</option> }
@@ -142,7 +130,6 @@
             <!-- Group header -->
             <div class="sgc-header">
               <div class="sgc-title-row">
-                <span class="sgc-mfi">{{ g.mfi }}</span>
                 <span class="sgc-period">{{ g.quarter }} {{ g.year }}</span>
               </div>
               <div class="sgc-sev-row">
@@ -152,10 +139,6 @@
                 <span class="sc-sev low">{{ totalLow(g) }}<span class="sc-lbl">L</span></span>
               </div>
               <div class="sgc-report-btns">
-                <button class="btn-analyze-mfi" (click)="analyzeMfiGroup(g, $event)"
-                        title="Consolidated analysis — all branches combined">
-                  <mat-icon>analytics</mat-icon> Analyze All
-                </button>
                 <button class="btn-report tech" (click)="downloadReport(g, 'technical')"
                         title="Download XLSX technical report">
                   <mat-icon>table_view</mat-icon> Technical (XLSX)
@@ -245,324 +228,144 @@
 
   <!-- ════════════════════ ANALYSIS TAB ════════════════════ -->
   @if (activeTab === 'analysis') {
+    @if (analysisLoading) {
+      <div class="empty-state tall"><span class="loading-dot large"></span><span>Loading analysis…</span></div>
+    } @else if (!selectedScan) {
+      <div class="empty-state tall">
+        <mat-icon>manage_search</mat-icon>
+        <span>Click a file row in the Scans tab to view its findings</span>
+        <button class="btn-goto-scans" (click)="openTab('scans')">Go to Scans</button>
+      </div>
+    } @else {
 
-    <!-- ── MFI Consolidated Mode ─────────────────────────────────────────── -->
-    @if (analysisMode === 'mfi') {
-      @if (mfiLoading) {
-        <div class="empty-state tall"><span class="loading-dot large"></span><span>Loading all scans for this MFI…</span></div>
-      } @else if (!mfiGroup) {
-        <div class="empty-state tall">
-          <mat-icon>analytics</mat-icon>
-          <span>Click <strong>Analyze All</strong> on a scan group in the Scans tab</span>
-          <button class="btn-goto-scans" (click)="openTab('scans')">Go to Scans</button>
+      <!-- Analysis header -->
+      <div class="analysis-header">
+        <div class="ah-left">
+          <span class="ah-period">{{ selectedScan.quarter }} {{ selectedScan.year }}</span>
+          <span class="scan-type-badge" [class]="selectedScan.scan_type">{{ selectedScan.scan_type }}</span>
+          @if (selectedScan.branch) { <span class="ah-branch">{{ selectedScan.branch }}</span> }
+          <span class="ah-file">{{ selectedScan.filename }}</span>
         </div>
-      } @else {
+      </div>
 
-        <!-- MFI Analysis header -->
-        <div class="analysis-header">
-          <div class="ah-left">
-            <span class="ah-mfi">{{ mfiGroup.mfi }}</span>
-            <span class="ah-period">{{ mfiGroup.quarter }} {{ mfiGroup.year }}</span>
-            <span class="mfi-scan-count">{{ mfiScans.length }} scan{{ mfiScans.length !== 1 ? 's' : '' }}</span>
-            @if (mfiScanFilter) {
-              <span class="mfi-filter-chip">
-                Filtered: 1 source
-                <button class="mfi-filter-clear" (click)="mfiScanFilter = ''; expandedFinding = null"><mat-icon>close</mat-icon></button>
-              </span>
-            }
-          </div>
-          <div class="ah-actions">
-            <button class="btn-report tech" (click)="downloadReport(mfiGroup, 'technical')" title="Download XLSX">
-              <mat-icon>table_view</mat-icon> Technical (XLSX)
-            </button>
-            <button class="btn-report exec" (click)="downloadReport(mfiGroup, 'executive')" title="Download PDF">
-              <mat-icon>picture_as_pdf</mat-icon> Executive (PDF)
-            </button>
-          </div>
-        </div>
-
-        <!-- Aggregated severity summary -->
-        <div class="sev-summary">
-          @for (bucket of [
-            {key:'critical',label:'Critical',val:mfiSummary.critical,pct:mfiSummary.pct(mfiSummary.critical)},
-            {key:'high',    label:'High',    val:mfiSummary.high,    pct:mfiSummary.pct(mfiSummary.high)},
-            {key:'medium',  label:'Medium',  val:mfiSummary.medium,  pct:mfiSummary.pct(mfiSummary.medium)},
-            {key:'low',     label:'Low',     val:mfiSummary.low,     pct:mfiSummary.pct(mfiSummary.low)},
-            {key:'info',    label:'Info',    val:mfiSummary.info,    pct:mfiSummary.pct(mfiSummary.info)}
-          ]; track bucket.key) {
-            @if ($index > 0) { <div class="vs-divider"></div> }
-            <div class="vs-bucket" [class.active]="sevFilter === bucket.key"
-                 (click)="sevFilter = $any(bucket.key)">
-              <div class="vs-sev-label" [class]="bucket.key + '-label'">{{ bucket.label }}</div>
-              <div class="vs-count" [class]="bucket.key === 'medium' ? 'med' : bucket.key === 'info' ? 'info-val' : bucket.key">{{ bucket.val }}</div>
-              <div class="vs-bar-track">
-                <div class="vs-bar-fill" [class]="(bucket.key === 'medium' ? 'med' : bucket.key === 'info' ? 'info' : bucket.key) + '-fill'"
-                     [style.width.%]="bucket.pct"></div>
-              </div>
-              <div class="vs-pct">{{ bucket.pct }}%</div>
+      <!-- Severity summary bar -->
+      <div class="sev-summary">
+        @for (bucket of [
+          {key:'critical',label:'Critical',val:vulnSummary.critical,pct:vulnSummary.pct(vulnSummary.critical)},
+          {key:'high',    label:'High',    val:vulnSummary.high,    pct:vulnSummary.pct(vulnSummary.high)},
+          {key:'medium',  label:'Medium',  val:vulnSummary.medium,  pct:vulnSummary.pct(vulnSummary.medium)},
+          {key:'low',     label:'Low',     val:vulnSummary.low,     pct:vulnSummary.pct(vulnSummary.low)},
+          {key:'info',    label:'Info',    val:vulnSummary.info,    pct:vulnSummary.pct(vulnSummary.info)}
+        ]; track bucket.key) {
+          @if ($index > 0) { <div class="vs-divider"></div> }
+          <div class="vs-bucket" [class.active]="sevFilter === bucket.key"
+               (click)="sevFilter = $any(bucket.key)">
+            <div class="vs-sev-label" [class]="bucket.key + '-label'">{{ bucket.label }}</div>
+            <div class="vs-count" [class]="bucket.key === 'medium' ? 'med' : bucket.key === 'info' ? 'info-val' : bucket.key">{{ bucket.val }}</div>
+            <div class="vs-bar-track">
+              <div class="vs-bar-fill" [class]="(bucket.key === 'medium' ? 'med' : bucket.key === 'info' ? 'info' : bucket.key) + '-fill'"
+                   [style.width.%]="bucket.pct"></div>
             </div>
-          }
-        </div>
-
-        <!-- Branch / File breakdown table -->
-        <div class="section-label">Branch / File Breakdown <span class="section-hint">(click a row to filter findings)</span></div>
-        <div class="branch-breakdown">
-          <table class="breakdown-table">
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Type</th>
-                <th>Critical</th>
-                <th>High</th>
-                <th>Medium</th>
-                <th>Low</th>
-                <th>Info</th>
-                <th>Hosts</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of mfiBranchBreakdown; track row.scan_id) {
-                <tr [class.active-row]="mfiScanFilter === row.scan_id"
-                    (click)="toggleMfiScanFilter(row.scan_id)">
-                  <td class="bd-source">
-                    <mat-icon class="sfi" style="margin-right:4px">description</mat-icon>
-                    {{ row.label }}
-                  </td>
-                  <td><span class="scan-type-badge" [class]="row.scan_type">{{ row.scan_type }}</span></td>
-                  <td><span class="sc-sev crit sm">{{ row.critical }}</span></td>
-                  <td><span class="sc-sev high sm">{{ row.high }}</span></td>
-                  <td><span class="sc-sev med sm">{{ row.medium }}</span></td>
-                  <td><span class="sc-sev low sm">{{ row.low }}</span></td>
-                  <td><span class="sc-sev" style="color:#9ca3af;font-size:11px">{{ row.info }}</span></td>
-                  <td class="bd-hosts">{{ row.hosts }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-
-        <!-- MFI combined findings table -->
-        <div class="findings-bar">
-          <span class="section-label" style="padding:0">
-            Combined Findings ({{ mfiFindings.length }})
-            @if (mfiScanFilter) { <span class="mfi-filter-label">· 1 source selected</span> }
-            @if (sevFilter !== 'all') { <span>· {{ sevFilter }} only</span> }
-          </span>
-          <div class="filter-pills">
-            @for (f of ['all','critical','high','medium','low','info']; track f) {
-              <button class="filter-pill" [class.active]="sevFilter === f"
-                      (click)="sevFilter = $any(f)">{{ f }}</button>
-            }
-          </div>
-        </div>
-
-        <div class="findings-table-wrap">
-          <table class="vuln-table">
-            <thead>
-              <tr>
-                <th style="width:80px">Severity</th>
-                <th style="width:65px">Plugin</th>
-                <th>Vulnerability</th>
-                <th style="width:130px">Source</th>
-                <th style="width:120px">Host</th>
-                <th style="width:55px">Port</th>
-                <th style="width:50px">CVSS</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (f of mfiFindings; track f.plugin_id + f.scan_id + f.host + f.port) {
-                <tr class="finding-row" (click)="toggleFinding(f.plugin_id + f.scan_id + f.host + f.port)">
-                  <td><span class="sev-badge" [ngClass]="sevClass(f.severity)">{{ f.severity }}</span></td>
-                  <td class="plugin-id">{{ f.plugin_id }}</td>
-                  <td class="plugin-name">{{ f.plugin_name }}</td>
-                  <td class="source-cell">
-                    @if (f.branch) {
-                      <span class="source-branch">{{ f.branch }}</span>
-                    } @else {
-                      <span class="source-file">{{ f.filename }}</span>
-                    }
-                    <span class="scan-type-mini" [class]="f.scan_type">{{ f.scan_type === 'internal' ? 'INT' : 'EXT' }}</span>
-                  </td>
-                  <td>{{ f.host }}</td>
-                  <td>{{ f.port !== '0' ? f.port : '—' }}</td>
-                  <td>{{ f.cvss3_base ?? f.cvss_base ?? '—' }}</td>
-                  <td class="expand-cell">
-                    <mat-icon class="expand-icon"
-                      [class.rotated]="expandedFinding === (f.plugin_id + f.scan_id + f.host + f.port)">
-                      expand_more
-                    </mat-icon>
-                  </td>
-                </tr>
-                @if (expandedFinding === (f.plugin_id + f.scan_id + f.host + f.port)) {
-                  <tr class="finding-detail-row">
-                    <td colspan="8">
-                      <div class="finding-detail">
-                        @if (f.cve.length) {
-                          <div class="fd-row"><span class="fd-label">CVE</span><span>{{ f.cve.join(', ') }}</span></div>
-                        }
-                        @if (f.description) {
-                          <div class="fd-row"><span class="fd-label">Description</span><span>{{ f.description }}</span></div>
-                        }
-                        @if (f.solution) {
-                          <div class="fd-row"><span class="fd-label">Solution</span><span class="fd-solution">{{ f.solution }}</span></div>
-                        }
-                      </div>
-                    </td>
-                  </tr>
-                }
-              }
-              @if (mfiFindings.length === 0) {
-                <tr><td colspan="8" class="no-vulns">No findings for this filter</td></tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
-    }
-
-    <!-- ── Single Scan Mode ───────────────────────────────────────────────── -->
-    @if (analysisMode === 'single') {
-      @if (analysisLoading) {
-        <div class="empty-state tall"><span class="loading-dot large"></span><span>Loading analysis…</span></div>
-      } @else if (!selectedScan) {
-        <div class="empty-state tall">
-          <mat-icon>manage_search</mat-icon>
-          <span>Click a file row in the Scans tab to view its findings</span>
-          <button class="btn-goto-scans" (click)="openTab('scans')">Go to Scans</button>
-        </div>
-      } @else {
-
-        <!-- Analysis header -->
-        <div class="analysis-header">
-          <div class="ah-left">
-            <span class="ah-mfi">{{ selectedScan.mfi }}</span>
-            <span class="ah-period">{{ selectedScan.quarter }} {{ selectedScan.year }}</span>
-            <span class="scan-type-badge" [class]="selectedScan.scan_type">{{ selectedScan.scan_type }}</span>
-            @if (selectedScan.branch) { <span class="ah-branch">{{ selectedScan.branch }}</span> }
-            <span class="ah-file">{{ selectedScan.filename }}</span>
-          </div>
-        </div>
-
-        <!-- Severity summary bar -->
-        <div class="sev-summary">
-          @for (bucket of [
-            {key:'critical',label:'Critical',val:vulnSummary.critical,pct:vulnSummary.pct(vulnSummary.critical)},
-            {key:'high',    label:'High',    val:vulnSummary.high,    pct:vulnSummary.pct(vulnSummary.high)},
-            {key:'medium',  label:'Medium',  val:vulnSummary.medium,  pct:vulnSummary.pct(vulnSummary.medium)},
-            {key:'low',     label:'Low',     val:vulnSummary.low,     pct:vulnSummary.pct(vulnSummary.low)},
-            {key:'info',    label:'Info',    val:vulnSummary.info,    pct:vulnSummary.pct(vulnSummary.info)}
-          ]; track bucket.key) {
-            @if ($index > 0) { <div class="vs-divider"></div> }
-            <div class="vs-bucket" [class.active]="sevFilter === bucket.key"
-                 (click)="sevFilter = $any(bucket.key)">
-              <div class="vs-sev-label" [class]="bucket.key + '-label'">{{ bucket.label }}</div>
-              <div class="vs-count" [class]="bucket.key === 'medium' ? 'med' : bucket.key === 'info' ? 'info-val' : bucket.key">{{ bucket.val }}</div>
-              <div class="vs-bar-track">
-                <div class="vs-bar-fill" [class]="(bucket.key === 'medium' ? 'med' : bucket.key === 'info' ? 'info' : bucket.key) + '-fill'"
-                     [style.width.%]="bucket.pct"></div>
-              </div>
-              <div class="vs-pct">{{ bucket.pct }}%</div>
-            </div>
-          }
-        </div>
-
-        <!-- Host strip -->
-        @if (selectedScan.hosts.length) {
-          <div class="section-label">Hosts ({{ selectedScan.hosts.length }})</div>
-          <div class="host-strip">
-            @for (h of selectedScan.hosts; track h.name) {
-              <div class="host-chip">
-                <div class="host-name">{{ h.name }}</div>
-                <div class="host-os">{{ h.os || '—' }}</div>
-                <div class="host-counts">
-                  @if (h.critical) { <span class="hc crit">{{ h.critical }}C</span> }
-                  @if (h.high)     { <span class="hc high">{{ h.high }}H</span> }
-                  @if (h.medium)   { <span class="hc med">{{ h.medium }}M</span> }
-                  @if (h.low)      { <span class="hc low">{{ h.low }}L</span> }
-                </div>
-              </div>
-            }
+            <div class="vs-pct">{{ bucket.pct }}%</div>
           </div>
         }
+      </div>
 
-        <!-- Findings table -->
-        <div class="findings-bar">
-          <span class="section-label" style="padding:0">
-            Findings ({{ filteredFindings.length }}
-            @if (sevFilter !== 'all') { <span>· filtered by {{ sevFilter }}</span> })
-            </span>
-          <div class="filter-pills">
-            @for (f of ['all','critical','high','medium','low','info']; track f) {
-              <button class="filter-pill" [class.active]="sevFilter === f"
-                      (click)="sevFilter = $any(f)">{{ f }}</button>
-            }
-          </div>
-        </div>
-
-        <div class="findings-table-wrap">
-          <table class="vuln-table">
-            <thead>
-              <tr>
-                <th style="width:80px">Severity</th>
-                <th style="width:70px">Plugin</th>
-                <th>Vulnerability</th>
-                <th style="width:120px">Host</th>
-                <th style="width:60px">Port</th>
-                <th style="width:55px">CVSS</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (f of filteredFindings; track f.plugin_id + f.host + f.port) {
-                <tr class="finding-row" (click)="toggleFinding(f.plugin_id + f.host + f.port)">
-                  <td><span class="sev-badge" [ngClass]="sevClass(f.severity)">{{ f.severity }}</span></td>
-                  <td class="plugin-id">{{ f.plugin_id }}</td>
-                  <td class="plugin-name">{{ f.plugin_name }}</td>
-                  <td>{{ f.host }}</td>
-                  <td>{{ f.port !== '0' ? f.port : '—' }}</td>
-                  <td>{{ f.cvss3_base ?? f.cvss_base ?? '—' }}</td>
-                  <td class="expand-cell">
-                    <mat-icon class="expand-icon"
-                      [class.rotated]="expandedFinding === (f.plugin_id + f.host + f.port)">
-                      expand_more
-                    </mat-icon>
-                  </td>
-                </tr>
-                @if (expandedFinding === (f.plugin_id + f.host + f.port)) {
-                  <tr class="finding-detail-row">
-                    <td colspan="7">
-                      <div class="finding-detail">
-                        @if (f.cve.length) {
-                          <div class="fd-row">
-                            <span class="fd-label">CVE</span>
-                            <span>{{ f.cve.join(', ') }}</span>
-                          </div>
-                        }
-                        @if (f.description) {
-                          <div class="fd-row">
-                            <span class="fd-label">Description</span>
-                            <span>{{ f.description }}</span>
-                          </div>
-                        }
-                        @if (f.solution) {
-                          <div class="fd-row">
-                            <span class="fd-label">Solution</span>
-                            <span class="fd-solution">{{ f.solution }}</span>
-                          </div>
-                        }
-                      </div>
-                    </td>
-                  </tr>
-                }
-              }
-              @if (filteredFindings.length === 0) {
-                <tr><td colspan="7" class="no-vulns">No findings for this filter</td></tr>
-              }
-            </tbody>
-          </table>
+      <!-- Host strip -->
+      @if (selectedScan.hosts.length) {
+        <div class="section-label">Hosts ({{ selectedScan.hosts.length }})</div>
+        <div class="host-strip">
+          @for (h of selectedScan.hosts; track h.name) {
+            <div class="host-chip">
+              <div class="host-name">{{ h.name }}</div>
+              <div class="host-os">{{ h.os || '—' }}</div>
+              <div class="host-counts">
+                @if (h.critical) { <span class="hc crit">{{ h.critical }}C</span> }
+                @if (h.high)     { <span class="hc high">{{ h.high }}H</span> }
+                @if (h.medium)   { <span class="hc med">{{ h.medium }}M</span> }
+                @if (h.low)      { <span class="hc low">{{ h.low }}L</span> }
+              </div>
+            </div>
+          }
         </div>
       }
+
+      <!-- Findings table -->
+      <div class="findings-bar">
+        <span class="section-label" style="padding:0">
+          Findings ({{ filteredFindings.length }}
+          @if (sevFilter !== 'all') { <span>· filtered by {{ sevFilter }}</span> })
+          </span>
+        <div class="filter-pills">
+          @for (f of ['all','critical','high','medium','low','info']; track f) {
+            <button class="filter-pill" [class.active]="sevFilter === f"
+                    (click)="sevFilter = $any(f)">{{ f }}</button>
+          }
+        </div>
+      </div>
+
+      <div class="findings-table-wrap">
+        <table class="vuln-table">
+          <thead>
+            <tr>
+              <th style="width:80px">Severity</th>
+              <th style="width:70px">Plugin</th>
+              <th>Vulnerability</th>
+              <th style="width:120px">Host</th>
+              <th style="width:60px">Port</th>
+              <th style="width:55px">CVSS</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (f of filteredFindings; track f.plugin_id + f.host + f.port) {
+              <tr class="finding-row" (click)="toggleFinding(f.plugin_id + f.host + f.port)">
+                <td><span class="sev-badge" [ngClass]="sevClass(f.severity)">{{ f.severity }}</span></td>
+                <td class="plugin-id">{{ f.plugin_id }}</td>
+                <td class="plugin-name">{{ f.plugin_name }}</td>
+                <td>{{ f.host }}</td>
+                <td>{{ f.port !== '0' ? f.port : '—' }}</td>
+                <td>{{ f.cvss3_base ?? f.cvss_base ?? '—' }}</td>
+                <td class="expand-cell">
+                  <mat-icon class="expand-icon"
+                    [class.rotated]="expandedFinding === (f.plugin_id + f.host + f.port)">
+                    expand_more
+                  </mat-icon>
+                </td>
+              </tr>
+              @if (expandedFinding === (f.plugin_id + f.host + f.port)) {
+                <tr class="finding-detail-row">
+                  <td colspan="7">
+                    <div class="finding-detail">
+                      @if (f.cve.length) {
+                        <div class="fd-row">
+                          <span class="fd-label">CVE</span>
+                          <span>{{ f.cve.join(', ') }}</span>
+                        </div>
+                      }
+                      @if (f.description) {
+                        <div class="fd-row">
+                          <span class="fd-label">Description</span>
+                          <span>{{ f.description }}</span>
+                        </div>
+                      }
+                      @if (f.solution) {
+                        <div class="fd-row">
+                          <span class="fd-label">Solution</span>
+                          <span class="fd-solution">{{ f.solution }}</span>
+                        </div>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+            @if (filteredFindings.length === 0) {
+              <tr><td colspan="7" class="no-vulns">No findings for this filter</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
     }
   }
 
@@ -570,103 +373,20 @@
   @if (activeTab === 'trends') {
     @if (trendsLoading) {
       <div class="empty-state"><span class="loading-dot large"></span><span>Loading trends…</span></div>
-    } @else if (!rawTrends.length) {
+    } @else if (!hasData) {
       <div class="empty-state tall">
         <mat-icon>trending_up</mat-icon>
         <span>No trend data yet — upload at least one scan to see trends</span>
       </div>
     } @else {
-
-      <!-- Mode toggle + controls -->
-      <div class="trend-controls">
-        <div class="trend-mode-toggle">
-          <button class="tmt-btn" [class.active]="trendMode === 'all'"
-                  (click)="setTrendMode('all')">
-            <mat-icon>bar_chart</mat-icon> All MFIs
-          </button>
-          <button class="tmt-btn" [class.active]="trendMode === 'single'"
-                  (click)="setTrendMode('single')">
-            <mat-icon>show_chart</mat-icon> Single MFI
-          </button>
+      <div class="trend-card full-width">
+        <div class="trend-card-head">
+          Vulnerability Trend — Critical / High / Medium over time
         </div>
-
-        @if (trendMode === 'all') {
-          <div class="trend-filters">
-            <div class="tf-group">
-              <label>Year</label>
-              <select [(ngModel)]="trendYear" (ngModelChange)="onTrendYearChange()">
-                @for (y of trendYears; track y) { <option [value]="y">{{ y }}</option> }
-              </select>
-            </div>
-            <div class="tf-group">
-              <label>Show</label>
-              <div class="sev-pills">
-                @for (s of [
-                  {v:'critical',label:'Critical',cls:'crit'},
-                  {v:'high',    label:'High',    cls:'high'},
-                  {v:'medium',  label:'Medium',  cls:'med'}
-                ]; track s.v) {
-                  <button class="sev-pill" [class.active]="trendSeverity === s.v"
-                          [class]="'sev-pill ' + s.cls + (trendSeverity === s.v ? ' active' : '')"
-                          (click)="trendSeverity = $any(s.v); onTrendSeverityChange()">
-                    {{ s.label }}
-                  </button>
-                }
-              </div>
-            </div>
-          </div>
-        }
-
-        @if (trendMode === 'single') {
-          <div class="trend-filters">
-            <div class="tf-group">
-              <label>MFI</label>
-              <select [(ngModel)]="trendMfi" (ngModelChange)="onTrendMfiChange()">
-                @for (m of mfiList; track m) { <option [value]="m">{{ m }}</option> }
-              </select>
-            </div>
-          </div>
-        }
+        <div class="chart-wrap tall">
+          <canvas baseChart [data]="trendChart!" [options]="lineOpts" type="line"></canvas>
+        </div>
       </div>
-
-      <!-- All MFIs chart -->
-      @if (trendMode === 'all') {
-        @if (!crossHasData) {
-          <div class="empty-state">
-            <mat-icon>info</mat-icon>
-            <span>No data for {{ trendYear }} — try a different year</span>
-          </div>
-        } @else {
-          <div class="trend-card full-width">
-            <div class="trend-card-head">
-              All MFIs — {{ trendSeverity | titlecase }} findings by quarter · {{ trendYear }}
-            </div>
-            <div class="chart-wrap tall">
-              <canvas baseChart [data]="crossChart!" [options]="lineOpts" type="line"></canvas>
-            </div>
-          </div>
-        }
-      }
-
-      <!-- Single MFI chart -->
-      @if (trendMode === 'single') {
-        @if (!singleHasData) {
-          <div class="empty-state">
-            <mat-icon>info</mat-icon>
-            <span>No data for {{ trendMfi }} yet</span>
-          </div>
-        } @else {
-          <div class="trend-card full-width">
-            <div class="trend-card-head">
-              {{ trendMfi }} — Critical / High / Medium trend over time
-            </div>
-            <div class="chart-wrap tall">
-              <canvas baseChart [data]="singleChart!" [options]="lineOpts" type="line"></canvas>
-            </div>
-          </div>
-        }
-      }
-
     }
   }
 
@@ -680,12 +400,6 @@
           <button class="btn-close-sm" (click)="showEdit = false"><mat-icon>close</mat-icon></button>
         </div>
         <div class="upload-grid">
-          <div class="form-field">
-            <label>MFI</label>
-            <select [(ngModel)]="editMfi">
-              @for (m of mfiList; track m) { <option [value]="m">{{ m }}</option> }
-            </select>
-          </div>
           <div class="form-field">
             <label>Quarter</label>
             <select [(ngModel)]="editQ">
@@ -725,12 +439,12 @@
     </div>
   }
 
-  <!-- ── Success toast ──────────────────────────────────────────────────── -->
+  <!-- ── Success toast ──────────────────────────────────────────────────────── -->
   @if (toast) {
     <div class="nessus-toast"><mat-icon>check_circle</mat-icon> {{ toast.msg }}</div>
   }
 
-  <!-- ── Error panel ────────────────────────────────────────────────────── -->
+  <!-- ── Error panel ────────────────────────────────────────────────────────── -->
   @if (errors.length) {
     <div class="error-panel">
       <div class="error-panel-head">

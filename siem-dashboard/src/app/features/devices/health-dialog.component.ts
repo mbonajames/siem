@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -121,10 +121,11 @@ export class HealthDialogComponent {
     public ref: MatDialogRef<HealthDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { endpointId: string; hostname: string },
     private sophos: SophosService,
+    private cdr: ChangeDetectorRef,
   ) {
     this.sophos.getEndpointHealth(data.endpointId).subscribe({
-      next: (h) => { this.health = h; this.loading = false; },
-      error: (e) => { this.error = e?.error?.error || e?.message || 'Failed to load health'; this.loading = false; }
+      next: (h) => { this.health = h; this.loading = false; this.cdr.detectChanges(); },
+      error: (e) => { this.error = e?.error?.error || e?.message || 'Failed to load health'; this.loading = false; this.cdr.detectChanges(); }
     });
   }
 

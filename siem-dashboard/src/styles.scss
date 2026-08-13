@@ -7,9 +7,9 @@
 @tailwind components;
 @tailwind utilities;
 
-$siem-dark-theme: mat.define-theme((
+$siem-light-theme: mat.define-theme((
   color: (
-    theme-type: dark,
+    theme-type: light,
     primary:    mat.$azure-palette,
     tertiary:   mat.$cyan-palette,
   ),
@@ -24,38 +24,46 @@ $siem-dark-theme: mat.define-theme((
 ));
 
 :root {
-  @include mat.all-component-themes($siem-dark-theme);
+  @include mat.all-component-themes($siem-light-theme);
 
   // ── Surfaces ──────────────────────────────────────────────────────────────
-  --siem-bg:               #0d1117;
-  --siem-surface:          #161b22;
-  --siem-surface-elevated: #1c2128;
-  --siem-sidebar:          #0e1419;
-  --siem-border:           #30363d;
-  --siem-border-subtle:    #21262d;
+  --siem-bg:               #F2F5F9;
+  --siem-surface:          #ffffff;
+  --siem-surface-elevated: #F2F5F9;
+  --siem-sidebar:          #1A3A5C;
+  --siem-border:           rgba(26,58,92,.12);
+  --siem-border-subtle:    rgba(26,58,92,.07);
 
   // ── Text ──────────────────────────────────────────────────────────────────
-  --siem-text-primary:   #e6edf3;
-  --siem-text-secondary: #8b949e;
-  --siem-text-faint:     #6e7681;
+  --siem-text-primary:   #1a1a18;
+  --siem-text-secondary: #374151;
+  --siem-text-faint:     #6b7280;
 
   // ── Severity ──────────────────────────────────────────────────────────────
-  --siem-critical: #da3633;
-  --siem-high:     #f85149;
-  --siem-medium:   #d29922;
-  --siem-low:      #3fb950;
-  --siem-info:     #58a6ff;
-  --siem-accent:   #1f6feb;
+  --siem-critical: #E24B4A;
+  --siem-high:     #BA7517;
+  --siem-medium:   #244d78;
+  --siem-low:      #639922;
+  --siem-info:     #1A3A5C;
+  --siem-accent:   #F46A1F;
+
+  // ── Legacy aliases (used by email-security and other components) ──────────
+  --siem-text:      #1a1a18;
+  --siem-muted:     #374151;
+  --siem-text-muted:#374151;
+  --siem-hover:     rgba(26,58,92,.05);
 
   // ── Brand ─────────────────────────────────────────────────────────────────
   --hope-orange:      #F46A1F;
   --hope-orange-dark: #C45114;
   --hope-purple:      #7F77DD;
+  --hope-navy:        #1A3A5C;
+  --hope-navy-deep:   #0F2540;
 
   // ── Shadows ───────────────────────────────────────────────────────────────
-  --shadow-card:  0 1px 3px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.04) inset;
-  --shadow-panel: 0 4px 20px rgba(0,0,0,.55);
-  --shadow-modal: 0 8px 40px rgba(0,0,0,.7);
+  --shadow-card:  0 1px 3px rgba(26,58,92,.08), 0 0.5px 0 rgba(26,58,92,.04) inset;
+  --shadow-panel: 0 4px 20px rgba(26,58,92,.15);
+  --shadow-modal: 0 8px 40px rgba(26,58,92,.25);
 }
 
 // ── Base ──────────────────────────────────────────────────────────────────────
@@ -75,8 +83,8 @@ html, body {
 // ── Scrollbar ─────────────────────────────────────────────────────────────────
 ::-webkit-scrollbar            { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track      { background: transparent; }
-::-webkit-scrollbar-thumb      { background: #30363d; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #484f58; }
+::-webkit-scrollbar-thumb      { background: rgba(26,58,92,.22); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(26,58,92,.38); }
 
 // ── Severity utilities ────────────────────────────────────────────────────────
 .severity-critical { color: var(--siem-critical) !important; }
@@ -100,24 +108,24 @@ html, body {
 
   mat-icon { font-size: 13px; width: 13px; height: 13px; }
 
-  &.critical { background: rgba(218,54,51,.12); color: var(--siem-critical); border: 1px solid rgba(218,54,51,.25); }
-  &.high     { background: rgba(248,81,73,.12); color: var(--siem-high);     border: 1px solid rgba(248,81,73,.25); }
-  &.medium   { background: rgba(210,153,34,.12); color: var(--siem-medium);  border: 1px solid rgba(210,153,34,.25); }
-  &.low      { background: rgba(63,185,80,.12); color: var(--siem-low);      border: 1px solid rgba(63,185,80,.25); }
-  &.info     { background: rgba(88,166,255,.12); color: var(--siem-info);    border: 1px solid rgba(88,166,255,.25); }
+  &.critical { background: #FCEBEB; color: #A32D2D; border: 1px solid rgba(226,75,74,.2); }
+  &.high     { background: #FAEEDA; color: #633806; border: 1px solid rgba(186,117,23,.2); }
+  &.medium   { background: #E8EEF4; color: #1A3A5C; border: 1px solid rgba(26,58,92,.18); }
+  &.low      { background: #EAF3DE; color: #27500A; border: 1px solid rgba(99,153,34,.2); }
+  &.info     { background: #E8EEF4; color: #1A3A5C; border: 1px solid rgba(26,58,92,.18); }
 
-  &.status-active       { background: rgba(63,185,80,.12);  color: var(--siem-low);      border: 1px solid rgba(63,185,80,.25); }
-  &.status-disconnected { background: rgba(218,54,51,.12);  color: var(--siem-critical); border: 1px solid rgba(218,54,51,.25); }
-  &.status-isolated     { background: rgba(210,153,34,.12); color: var(--siem-medium);   border: 1px solid rgba(210,153,34,.25); }
-  &.status-open         { background: rgba(88,166,255,.12); color: var(--siem-info);     border: 1px solid rgba(88,166,255,.25); }
-  &.status-in-progress  { background: rgba(210,153,34,.12); color: var(--siem-medium);   border: 1px solid rgba(210,153,34,.25); }
-  &.status-done         { background: rgba(63,185,80,.12);  color: var(--siem-low);      border: 1px solid rgba(63,185,80,.25); }
+  &.status-active       { background: #EAF3DE; color: #27500A; border: 1px solid rgba(99,153,34,.2); }
+  &.status-disconnected { background: #FCEBEB; color: #A32D2D; border: 1px solid rgba(226,75,74,.2); }
+  &.status-isolated     { background: #FAEEDA; color: #633806; border: 1px solid rgba(186,117,23,.2); }
+  &.status-open         { background: #E8EEF4; color: #1A3A5C; border: 1px solid rgba(26,58,92,.18); }
+  &.status-in-progress  { background: #FAEEDA; color: #633806; border: 1px solid rgba(186,117,23,.2); }
+  &.status-done         { background: #EAF3DE; color: #27500A; border: 1px solid rgba(99,153,34,.2); }
 }
 
 // ── Material card override ────────────────────────────────────────────────────
 .mat-mdc-card {
-  background-color: var(--siem-surface) !important;
-  border: 1px solid var(--siem-border) !important;
+  background-color: #ffffff !important;
+  border: 0.5px solid rgba(26,58,92,.12) !important;
   box-shadow: var(--shadow-card) !important;
 }
 

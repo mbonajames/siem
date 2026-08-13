@@ -477,7 +477,7 @@
 
 .wazuh-bar-track {
   height: 6px;
-  background: rgba(255,255,255,.08);
+  background: rgba(26,58,92,.08);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -551,10 +551,10 @@
   font-weight: 600;
 }
 
-.sev-crit { background: rgba(218, 54, 51, .2); color: #f85149; }
-.sev-high { background: rgba(210, 153, 34, .2); color: #d29922; }
-.sev-med  { background: rgba(88, 166, 255, .15); color: #58a6ff; }
-.sev-low  { background: rgba(63, 185, 80, .15); color: #3fb950; }
+.sev-crit { background: #FCEBEB; color: #A32D2D; }
+.sev-high { background: #FAEEDA; color: #633806; }
+.sev-med  { background: #E8EEF4; color: #1A3A5C; }
+.sev-low  { background: #EAF3DE; color: #27500A; }
 
 // ── Desc cell ────────────────────────────────────────────────────────────────
 .desc-cell {
@@ -816,7 +816,7 @@
 .sev-bar-track {
   flex: 1;
   height: 5px;
-  background: rgba(255,255,255,.06);
+  background: rgba(26,58,92,.06);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -891,7 +891,7 @@
   gap: 6px;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(48, 54, 61, .5);
+  border-bottom: 1px solid rgba(26, 58, 92, .1);
   font-size: 13px;
   cursor: pointer;
 
@@ -921,10 +921,10 @@
   white-space: nowrap;
 }
 
-.st-open       { background: rgba(218, 54, 51, .15); color: #f85149; }
-.st-inprogress { background: rgba(210, 153, 34, .15); color: #d29922; }
-.st-done       { background: rgba(63, 185, 80, .15); color: #3fb950; }
-.st-default    { background: rgba(88, 166, 255, .1); color: #58a6ff; }
+.st-open       { background: #FCEBEB; color: #A32D2D; }
+.st-inprogress { background: #FAEEDA; color: #633806; }
+.st-done       { background: #EAF3DE; color: #27500A; }
+.st-default    { background: #E8EEF4; color: #1A3A5C; }
 
 .assignee-cell {
   display: flex;
@@ -938,8 +938,8 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: rgba(26, 58, 92, .4);
-  color: #58a6ff;
+  background: #E8EEF4;
+  color: #1A3A5C;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1020,7 +1020,7 @@
   gap: 5px;
   align-items: center;
   padding: 5px 0;
-  border-bottom: 1px solid rgba(48, 54, 61, .4);
+  border-bottom: 1px solid rgba(26, 58, 92, .08);
   font-size: 13px;
   cursor: pointer;
 
@@ -1034,7 +1034,7 @@
     border-radius: 4px;
   }
 
-  &.email-selected { background: rgba(88, 166, 255, .07); }
+  &.email-selected { background: #E8EEF4; }
 }
 
 .ioc-cell {
@@ -1180,7 +1180,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px 0;
-  border-bottom: 1px solid rgba(48, 54, 61, .3);
+  border-bottom: 1px solid rgba(26, 58, 92, .08);
   &:last-child { border: none; }
 }
 

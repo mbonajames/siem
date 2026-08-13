@@ -11,7 +11,7 @@
     <span class="spacer"></span>
 
     <!-- Time range (hidden in edit mode — Grafana has its own time picker) -->
-    @if (!editMode) {
+    @if (!editMode && !accessDenied) {
       <div class="time-group">
         @for (tr of timeRanges; track tr.from) {
           <button class="time-btn" [class.active]="selectedFrom === tr.from"
@@ -20,33 +20,47 @@
       </div>
     }
 
-    <!-- View / Edit toggle -->
-    <div class="mode-group">
-      <button class="mode-btn" [class.active]="!editMode" (click)="editMode && toggleEditMode()"
-        matTooltip="View mode — kiosk">
-        <mat-icon>visibility</mat-icon> View
-      </button>
-      <button class="mode-btn" [class.active]="editMode" (click)="!editMode && toggleEditMode()"
-        matTooltip="Edit mode — Grafana toolbar">
-        <mat-icon>edit</mat-icon> Edit
-      </button>
-    </div>
+    @if (!accessDenied) {
+      <!-- View / Edit toggle -->
+      <div class="mode-group">
+        <button class="mode-btn" [class.active]="!editMode" (click)="editMode && toggleEditMode()"
+          matTooltip="View mode — kiosk">
+          <mat-icon>visibility</mat-icon> View
+        </button>
+        <button class="mode-btn" [class.active]="editMode" (click)="!editMode && toggleEditMode()"
+          matTooltip="Edit mode — Grafana toolbar">
+          <mat-icon>edit</mat-icon> Edit
+        </button>
+      </div>
 
-    <button mat-icon-button matTooltip="Open in Grafana (new tab)" (click)="openInGrafana()">
-      <mat-icon>open_in_new</mat-icon>
-    </button>
+      <button mat-icon-button matTooltip="Open in Grafana (new tab)" (click)="openInGrafana()">
+        <mat-icon>open_in_new</mat-icon>
+      </button>
 
-    <button mat-icon-button matTooltip="Delete dashboard" color="warn"
-      (click)="delete()" [disabled]="deleting">
-      @if (deleting) { <mat-icon class="spin-icon">sync</mat-icon> }
-      @else { <mat-icon>delete_outline</mat-icon> }
-    </button>
+      <!-- Delete — only shown to the owner -->
+      @if (isOwner) {
+        <button mat-icon-button matTooltip="Delete dashboard" color="warn"
+          (click)="delete()" [disabled]="deleting">
+          @if (deleting) { <mat-icon class="spin-icon">sync</mat-icon> }
+          @else { <mat-icon>delete_outline</mat-icon> }
+        </button>
+      }
+    }
   </div>
 
   <!-- Content -->
   <div class="view-content">
     @if (loading) {
       <div class="centered"><mat-spinner diameter="36"></mat-spinner></div>
+    } @else if (accessDenied) {
+      <div class="access-denied">
+        <mat-icon class="lock-icon">lock</mat-icon>
+        <h2>Access Denied</h2>
+        <p>You do not have permission to view this dashboard.<br>Ask the owner to share it with you.</p>
+        <button class="back-link" (click)="goBack()">
+          <mat-icon>arrow_back</mat-icon> Back to dashboards
+        </button>
+      </div>
     } @else if (!config?.configured) {
       <div class="centered">
         <mat-icon>bar_chart</mat-icon>

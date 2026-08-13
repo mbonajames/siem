@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -106,11 +106,18 @@ export class EmailSecurityComponent implements OnInit {
   vtResults: Record<string, VtResult> = {};
   vtLoading = new Set<string>();
 
-  constructor(private svc: EmailSecurityService) {}
+  constructor(private svc: EmailSecurityService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.loadAll();
     this.loadIncidents();
+  }
+
+  onReuse(): void {
+    if (!this.emails.length || this.loading) {
+      this.loadAll();
+      this.loadIncidents();
+    }
   }
 
   setDays(d: number): void {
@@ -128,10 +135,11 @@ export class EmailSecurityComponent implements OnInit {
           this.incidentsError = e?.error?.detail || e?.message || 'Failed to load incidents';
           return of({ incidents: [], total: 0 });
         }),
-        finalize(() => (this.incidentsLoading = false)),
+        finalize(() => { this.incidentsLoading = false; this.cdr.detectChanges(); }),
       )
       .subscribe(r => {
         this.incidents = r.incidents || [];
+        this.cdr.detectChanges();
       });
   }
 
@@ -166,9 +174,10 @@ export class EmailSecurityComponent implements OnInit {
         }
         return of({ results: [] });
       }),
-      finalize(() => (this.loading = false)),
+      finalize(() => { this.loading = false; this.cdr.detectChanges(); }),
     ).subscribe(r => {
       this.emails = (r as any).results || [];
+      this.cdr.detectChanges();
     });
   }
 
@@ -177,8 +186,8 @@ export class EmailSecurityComponent implements OnInit {
     this.detail = null;
     this.detailLoading = true;
     this.svc.getDetail(email.NetworkMessageId)
-      .pipe(catchError(() => of(null)), finalize(() => (this.detailLoading = false)))
-      .subscribe(d => (this.detail = d));
+      .pipe(catchError(() => of(null)), finalize(() => { this.detailLoading = false; this.cdr.detectChanges(); }))
+      .subscribe(d => { this.detail = d; this.cdr.detectChanges(); });
   }
 
   closeDetail(): void {
@@ -192,12 +201,13 @@ export class EmailSecurityComponent implements OnInit {
     this.huntError = '';
     this.huntResults = null;
     this.svc.runHunt(this.huntQuery)
-      .pipe(finalize(() => (this.huntLoading = false)))
+      .pipe(finalize(() => { this.huntLoading = false; this.cdr.detectChanges(); }))
       .subscribe({
         next: r => {
           this.huntResults = r.results || [];
           this.huntSchema  = r.schema  || [];
           if (this.huntResults.length === 0) this.huntError = 'Query returned no results.';
+          this.cdr.detectChanges();
         },
         error: e => {
           const status = e?.status;
@@ -206,6 +216,7 @@ export class EmailSecurityComponent implements OnInit {
           } else {
             this.huntError = e?.error?.detail || e?.error?.error || 'Query failed';
           }
+          this.cdr.detectChanges();
         },
       });
   }
@@ -228,14 +239,15 @@ export class EmailSecurityComponent implements OnInit {
       user_id:              this.actionUserId,
       internet_message_id:  this.actionModal.email.InternetMessageId,
       action:               this.actionModal.action as any,
-    }).pipe(finalize(() => (this.actionLoading = false)))
+    }).pipe(finalize(() => { this.actionLoading = false; this.cdr.detectChanges(); }))
       .subscribe({
         next: () => {
           this.showToast(`Action '${this.actionModal!.action}' applied`, 'ok');
           this.actionModal = null;
           this.loadAll();
+          this.cdr.detectChanges();
         },
-        error: e => this.showToast(e?.error?.error || 'Action failed', 'err'),
+        error: e => { this.showToast(e?.error?.error || 'Action failed', 'err'); this.cdr.detectChanges(); },
       });
   }
 
@@ -406,9 +418,9 @@ export class EmailSecurityComponent implements OnInit {
                 : `https://www.virustotal.com/gui/search/${encodeURIComponent(value)}`;
           return of({ _vtError: true, _notFound: notFound, error: errMsg, permalink: fallback } as any);
         }),
-        finalize(() => this.vtLoading.delete(key))
+        finalize(() => { this.vtLoading.delete(key); this.cdr.detectChanges(); })
       )
-      .subscribe(r => (this.vtResults[key] = r));
+      .subscribe(r => { this.vtResults[key] = r; this.cdr.detectChanges(); });
   }
 
   vtGet(type: string, value: string): VtResult | null {
@@ -465,6 +477,7 @@ export class EmailSecurityComponent implements OnInit {
         this.mapLoaded = true;
         this._buildLayout(data);
       }
+      this.cdr.detectChanges();
     });
   }
 

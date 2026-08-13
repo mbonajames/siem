@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -114,6 +114,7 @@ export class AlertsComponent implements OnInit {
     private alertStatusSvc: AlertStatusService,
     private snackBar:      MatSnackBar,
     private route:         ActivatedRoute,
+    private cdr:           ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -128,6 +129,10 @@ export class AlertsComponent implements OnInit {
     const q = qp.get('q');
     if (q) this.searchQuery = q;
     this.loadAlerts();
+  }
+
+  onReuse(): void {
+    if (!this.alerts.length || this.loading) this.loadAlerts();
   }
 
   loadAlerts(): void {
@@ -153,6 +158,7 @@ export class AlertsComponent implements OnInit {
         this.total   = total;
         this.alerts  = events;
         this.loading = false;
+        this.cdr.detectChanges();
 
         // Load alert statuses in background
         if (events.length) {
@@ -160,6 +166,7 @@ export class AlertsComponent implements OnInit {
             next: statuses => {
               this.alertStatuses.clear();
               for (const s of statuses) this.alertStatuses.set(s.alert_id, s);
+              this.cdr.detectChanges();
             },
             error: () => {},
           });
@@ -174,6 +181,7 @@ export class AlertsComponent implements OnInit {
             for (const [id, ticket] of Object.entries(tickets)) {
               this.jiraTickets.set(id, ticket);
             }
+            this.cdr.detectChanges();
             for (const ev of events) {
               if (ev.severity === 'Critical') this.createTicket(ev);
             }
@@ -189,6 +197,7 @@ export class AlertsComponent implements OnInit {
         this.loading = false;
         const msg = err?.error?.detail ?? err?.message ?? 'Failed to reach the API Gateway.';
         this.snackBar.open(msg, 'Dismiss', { duration: 10000, panelClass: 'snack-error' });
+        this.cdr.detectChanges();
       }
     });
   }
@@ -231,10 +240,11 @@ export class AlertsComponent implements OnInit {
       entity_type: type, value, limit: 100,
     };
     this.gateway.investigate(req).subscribe({
-      next:  (res) => { this.investigateResult = res; this.investigating = false; },
+      next:  (res) => { this.investigateResult = res; this.investigating = false; this.cdr.detectChanges(); },
       error: (err) => {
         this.investigateError = err?.error?.detail ?? err?.message ?? 'Investigation failed.';
         this.investigating = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -253,10 +263,11 @@ export class AlertsComponent implements OnInit {
       severities:  this.invSeverity ? [this.invSeverity] : undefined,
     };
     this.gateway.investigate(req).subscribe({
-      next:  (res) => { this.investigateResult = res; this.investigating = false; },
+      next:  (res) => { this.investigateResult = res; this.investigating = false; this.cdr.detectChanges(); },
       error: (err) => {
         this.investigateError = err?.error?.detail ?? err?.message ?? 'Investigation failed.';
         this.investigating = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -276,10 +287,12 @@ export class AlertsComponent implements OnInit {
       next: (res) => {
         this.investigateResult!.events.push(...res.events);
         this.loadingMore = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         this.investigateError = err?.error?.detail ?? err?.message ?? 'Load more failed.';
         this.loadingMore = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -310,6 +323,7 @@ export class AlertsComponent implements OnInit {
           const ref = this.snackBar.open(`JIRA ${res.key} created`, 'View', { duration: 6000 });
           ref.onAction().subscribe(() => window.open(res.url, '_blank'));
         }
+        this.cdr.detectChanges();
       },
       error: (err) => {
         this.creatingTicket.delete(row.event_id);
@@ -321,6 +335,7 @@ export class AlertsComponent implements OnInit {
             { duration: 8000, panelClass: 'snack-error' },
           );
         }
+        this.cdr.detectChanges();
       },
     });
   }
@@ -436,10 +451,11 @@ export class AlertsComponent implements OnInit {
                :                        this.gateway.vtLookupHash(value);
 
     req$.subscribe({
-      next:  r  => { this.vtResult = r; this.vtLoading = false; },
+      next:  r  => { this.vtResult = r; this.vtLoading = false; this.cdr.detectChanges(); },
       error: e  => {
         this.vtError   = e?.error?.detail ?? e?.message ?? 'VirusTotal lookup failed';
         this.vtLoading = false;
+        this.cdr.detectChanges();
       },
     });
   }
@@ -492,6 +508,7 @@ export class AlertsComponent implements OnInit {
         this.clearSelection();
         const ref = this.snackBar.open(`Batch JIRA ${res.key} created`, 'View', { duration: 8000 });
         ref.onAction().subscribe(() => window.open(res.url, '_blank'));
+        this.cdr.detectChanges();
       },
       error: err => {
         this.batchCreating = false;
@@ -500,6 +517,7 @@ export class AlertsComponent implements OnInit {
           'Dismiss',
           { duration: 8000, panelClass: 'snack-error' },
         );
+        this.cdr.detectChanges();
       },
     });
   }
@@ -507,7 +525,7 @@ export class AlertsComponent implements OnInit {
   quickSetStatus(alertId: string, status: 'new' | 'acknowledged' | 'closed', event: Event): void {
     event.stopPropagation();
     this.alertStatusSvc.upsert({ alert_id: alertId, status }).subscribe({
-      next: s => { this.alertStatuses.set(alertId, s); },
+      next: s => { this.alertStatuses.set(alertId, s); this.cdr.detectChanges(); },
       error: () => {},
     });
   }

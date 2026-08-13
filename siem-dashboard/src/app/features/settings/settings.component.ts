@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,9 +8,11 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { Router } from '@angular/router';
 import { SettingsService, AuditLog } from '../../core/services/settings.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationsService, NotificationConfig } from '../../core/services/notifications.service';
+import { ConnectorsComponent } from '../connectors/connectors.component';
 
 const ACTION_ICONS: Record<string, string> = {
   login:                       'login',
@@ -31,6 +33,7 @@ const ACTION_ICONS: Record<string, string> = {
   imports: [
     CommonModule, FormsModule, MatIconModule, MatButtonModule,
     MatProgressSpinnerModule, MatTooltipModule, MatSnackBarModule,
+    ConnectorsComponent,
   ],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
@@ -54,10 +57,17 @@ export class SettingsComponent implements OnInit {
   auditOutcome = '';
   auditSearch  = '';
 
+  /** true → /settings view; false → /activity-log view */
+  get isSettingsView(): boolean {
+    return this.router.url.startsWith('/settings');
+  }
+
   constructor(
     private settingsService:   SettingsService,
     private notifSvc:          NotificationsService,
     private snackBar:          MatSnackBar,
+    private router:            Router,
+    private cdr:               ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -70,6 +80,7 @@ export class SettingsComponent implements OnInit {
     this.notifSvc.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
       if (cfg) this.notifConfig = cfg;
       this.notifLoading = false;
+      this.cdr.detectChanges();
     });
   }
 
@@ -80,6 +91,7 @@ export class SettingsComponent implements OnInit {
     this.notifSvc.saveConfig(payload).pipe(catchError(() => of(null))).subscribe(res => {
       this.notifSaving = false;
       this.snackBar.open(res ? 'Notification settings saved' : 'Save failed', '', { duration: 3000 });
+      this.cdr.detectChanges();
     });
   }
 
@@ -89,6 +101,7 @@ export class SettingsComponent implements OnInit {
     this.notifSvc.sendTest().pipe(catchError(() => of(null))).subscribe(res => {
       this.notifTesting    = false;
       this.notifTestResult = res ? 'Test message sent to Teams!' : 'Test failed — check webhook URL.';
+      this.cdr.detectChanges();
     });
   }
 
@@ -111,6 +124,7 @@ export class SettingsComponent implements OnInit {
         this.auditLogs  = this.auditLogs.filter(l => l.id !== log.id);
         this.auditTotal = Math.max(0, this.auditTotal - 1);
       }
+      this.cdr.detectChanges();
     });
   }
 
@@ -123,6 +137,7 @@ export class SettingsComponent implements OnInit {
       this.clearing   = false;
       this.auditLogs  = [];
       this.auditTotal = 0;
+      this.cdr.detectChanges();
     });
   }
 
@@ -141,6 +156,7 @@ export class SettingsComponent implements OnInit {
         this.auditError = 'Failed to load audit logs';
       }
       this.auditLoading = false;
+      this.cdr.detectChanges();
     });
   }
 

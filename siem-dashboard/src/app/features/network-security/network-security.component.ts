@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -42,6 +42,7 @@ export class NetworkSecurityComponent implements OnInit, OnDestroy {
   constructor(
     private gateway: GatewayService,
     private darktrace: DarktraceService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -51,6 +52,10 @@ export class NetworkSecurityComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  onReuse(): void {
+    if (!this.alerts.length || this.loading) this.load();
   }
 
   load(): void {
@@ -68,12 +73,13 @@ export class NetworkSecurityComponent implements OnInit, OnDestroy {
       summary: this.darktrace.getSummaryStatistics()
         .pipe(catchError(() => of(null))),
     })
-      .pipe(finalize(() => (this.loading = false)), takeUntil(this.destroy$))
+      .pipe(finalize(() => { this.loading = false; this.cdr.detectChanges(); }), takeUntil(this.destroy$))
       .subscribe(({ alerts, summary }) => {
         this.alerts = (alerts as AlertsPage).events || [];
         this.total = (alerts as AlertsPage).total || 0;
         this.summaryStats = summary;
         this.computeStats();
+        this.cdr.detectChanges();
       });
   }
 

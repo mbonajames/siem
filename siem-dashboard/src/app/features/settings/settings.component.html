@@ -2,193 +2,216 @@
 
   <!-- ── Page header ──────────────────────────────────────────────────────── -->
   <div class="page-header">
-    <h1><mat-icon>history</mat-icon> Settings &amp; Activity</h1>
+    @if (isSettingsView) {
+      <h1><mat-icon>settings</mat-icon> Settings</h1>
+    } @else {
+      <h1><mat-icon>history</mat-icon> Recent Activities</h1>
+    }
   </div>
 
-  <!-- ── Notifications card ───────────────────────────────────────────────── -->
-  <div class="notif-card">
-    <div class="notif-card-header">
-      <mat-icon class="notif-icon">notifications_active</mat-icon>
-      <div>
-        <div class="notif-title">Teams Notifications</div>
-        <div class="notif-subtitle">Send alert notifications to Microsoft Teams via webhook</div>
-      </div>
-      <div class="notif-toggle-wrap">
-        <label class="toggle-label">
-          <input type="checkbox" [(ngModel)]="notifConfig.enabled">
-          <span class="toggle-text">{{ notifConfig.enabled ? 'Enabled' : 'Disabled' }}</span>
-        </label>
-      </div>
-    </div>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SETTINGS VIEW  (/settings)
+       ══════════════════════════════════════════════════════════════════ -->
+  @if (isSettingsView) {
 
-    @if (notifLoading) {
-      <div class="notif-loading"><mat-spinner diameter="20"></mat-spinner></div>
-    } @else {
-      <div class="notif-fields">
-        <div class="notif-field">
-          <label>Webhook URL</label>
-          <div class="webhook-input-wrap">
-            <input class="notif-input" [type]="showWebhook ? 'text' : 'password'"
-              [(ngModel)]="notifConfig.teams_webhook_url"
-              placeholder="https://outlook.office.com/webhook/…">
-            <button class="eye-btn" type="button" (click)="showWebhook = !showWebhook">
-              <mat-icon>{{ showWebhook ? 'visibility_off' : 'visibility' }}</mat-icon>
-            </button>
+    <!-- ── Teams Notifications ─────────────────────────────────────────── -->
+    <div class="notif-card">
+      <div class="notif-card-header">
+        <div class="notif-icon-wrap">
+          <mat-icon class="notif-icon">notifications_active</mat-icon>
+        </div>
+        <div>
+          <div class="notif-title">Teams Notifications</div>
+          <div class="notif-subtitle">Send alert notifications to Microsoft Teams via webhook</div>
+        </div>
+        <div class="notif-toggle-wrap">
+          <label class="toggle-label">
+            <input type="checkbox" [(ngModel)]="notifConfig.enabled">
+            <span class="toggle-text">{{ notifConfig.enabled ? 'Enabled' : 'Disabled' }}</span>
+          </label>
+        </div>
+      </div>
+
+      @if (notifLoading) {
+        <div class="notif-loading"><mat-spinner diameter="20"></mat-spinner></div>
+      } @else {
+        <div class="notif-fields">
+          <div class="notif-field notif-field--wide">
+            <label>Webhook URL</label>
+            <div class="webhook-input-wrap">
+              <input class="notif-input" [type]="showWebhook ? 'text' : 'password'"
+                [(ngModel)]="notifConfig.teams_webhook_url"
+                placeholder="https://outlook.office.com/webhook/…">
+              <button class="eye-btn" type="button" (click)="showWebhook = !showWebhook">
+                <mat-icon>{{ showWebhook ? 'visibility_off' : 'visibility' }}</mat-icon>
+              </button>
+            </div>
+            @if (notifConfig.teams_webhook_url_masked) {
+              <span class="field-hint">Current: {{ notifConfig.teams_webhook_url_masked }}</span>
+            }
           </div>
-          @if (notifConfig.teams_webhook_url_masked) {
-            <span class="field-hint">Current: {{ notifConfig.teams_webhook_url_masked }}</span>
+          <div class="notif-field">
+            <label>Minimum Severity</label>
+            <select class="notif-select" [(ngModel)]="notifConfig.min_severity">
+              <option value="Critical">Critical only</option>
+              <option value="High">High &amp; Critical</option>
+            </select>
+          </div>
+          <div class="notif-field">
+            <label>Poll Interval (seconds)</label>
+            <input class="notif-input short" type="number" [(ngModel)]="notifConfig.poll_interval_secs"
+              min="30" max="3600">
+          </div>
+        </div>
+
+        <div class="notif-actions">
+          <button class="notif-save-btn" (click)="saveNotifConfig()" [disabled]="notifSaving">
+            @if (notifSaving) { <mat-icon class="spin-sm">sync</mat-icon> } @else { <mat-icon>save</mat-icon> }
+            Save
+          </button>
+          <button class="notif-test-btn" (click)="testNotification()" [disabled]="notifTesting">
+            @if (notifTesting) { <mat-icon class="spin-sm">sync</mat-icon> } @else { <mat-icon>send</mat-icon> }
+            Send Test
+          </button>
+          @if (notifTestResult) {
+            <span class="notif-test-result">{{ notifTestResult }}</span>
           }
         </div>
-        <div class="notif-field">
-          <label>Minimum Severity</label>
-          <select class="notif-select" [(ngModel)]="notifConfig.min_severity">
-            <option value="Critical">Critical only</option>
-            <option value="High">High &amp; Critical</option>
-          </select>
-        </div>
-        <div class="notif-field">
-          <label>Poll Interval (seconds)</label>
-          <input class="notif-input short" type="number" [(ngModel)]="notifConfig.poll_interval_secs"
-            min="30" max="3600">
-        </div>
-      </div>
-
-      <div class="notif-actions">
-        <button mat-flat-button class="notif-save-btn" (click)="saveNotifConfig()" [disabled]="notifSaving">
-          @if (notifSaving) { <mat-icon class="spin-sm">sync</mat-icon> } @else { <mat-icon>save</mat-icon> }
-          Save
-        </button>
-        <button mat-stroked-button class="notif-test-btn" (click)="testNotification()" [disabled]="notifTesting">
-          @if (notifTesting) { <mat-icon class="spin-sm">sync</mat-icon> } @else { <mat-icon>send</mat-icon> }
-          Send Test
-        </button>
-        @if (notifTestResult) {
-          <span class="notif-test-result">{{ notifTestResult }}</span>
-        }
-      </div>
-    }
-  </div>
-
-  <!-- ── Toolbar ──────────────────────────────────────────────────────────── -->
-  <div class="audit-toolbar">
-    <mat-icon class="audit-toolbar-icon">manage_search</mat-icon>
-    <span class="audit-toolbar-title">Activity Log</span>
-    <div class="audit-toolbar-sep"></div>
-
-    <div class="audit-search-wrap">
-      <mat-icon>search</mat-icon>
-      <input class="audit-search" placeholder="Search user, action, resource…"
-             [(ngModel)]="auditSearch">
+      }
     </div>
 
-    <select class="audit-select" [(ngModel)]="auditHours" (change)="onFilterChange()">
-      <option [ngValue]="1">Last 1h</option>
-      <option [ngValue]="24">Last 24h</option>
-      <option [ngValue]="168">Last 7d</option>
-      <option [ngValue]="720">Last 30d</option>
-    </select>
+    <!-- ── Connectors (embedded) ───────────────────────────────────────── -->
+    <app-connectors />
 
-    <select class="audit-select" [(ngModel)]="auditOutcome" (change)="onFilterChange()">
-      <option value="">All outcomes</option>
-      <option value="success">Success</option>
-      <option value="failure">Failure</option>
-      <option value="warning">Warning</option>
-    </select>
+  }
 
-    <button class="audit-refresh-btn" (click)="loadAuditLogs()"
-            [disabled]="auditLoading" matTooltip="Refresh">
-      <mat-icon [class.spin]="auditLoading">refresh</mat-icon>
-    </button>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ACTIVITY LOG VIEW  (/activity-log)
+       ══════════════════════════════════════════════════════════════════ -->
+  @if (!isSettingsView) {
 
-    @if (auth.isAdmin() && auditTotal > 0) {
-      <button class="audit-clear-btn" (click)="clearAll()"
-              [disabled]="clearing" matTooltip="Clear all entries (admin only)">
-        <mat-icon>delete_sweep</mat-icon>
-        Clear All
+    <!-- ── Toolbar ─────────────────────────────────────────────────────── -->
+    <div class="audit-toolbar">
+      <mat-icon class="audit-toolbar-icon">manage_search</mat-icon>
+      <span class="audit-toolbar-title">Activity Log</span>
+      <div class="audit-toolbar-sep"></div>
+
+      <div class="audit-search-wrap">
+        <mat-icon>search</mat-icon>
+        <input class="audit-search" placeholder="Search user, action, resource…"
+               [(ngModel)]="auditSearch">
+      </div>
+
+      <select class="audit-select" [(ngModel)]="auditHours" (change)="onFilterChange()">
+        <option [ngValue]="1">Last 1h</option>
+        <option [ngValue]="24">Last 24h</option>
+        <option [ngValue]="168">Last 7d</option>
+        <option [ngValue]="720">Last 30d</option>
+      </select>
+
+      <select class="audit-select" [(ngModel)]="auditOutcome" (change)="onFilterChange()">
+        <option value="">All outcomes</option>
+        <option value="success">Success</option>
+        <option value="failure">Failure</option>
+        <option value="warning">Warning</option>
+      </select>
+
+      <button class="audit-refresh-btn" (click)="loadAuditLogs()"
+              [disabled]="auditLoading" matTooltip="Refresh">
+        <mat-icon [class.spin]="auditLoading">refresh</mat-icon>
       </button>
-    }
 
-    @if (auditTotal > 0) {
-      <span class="audit-count">{{ auditTotal }} events</span>
-    }
-  </div>
+      @if (auth.isAdmin() && auditTotal > 0) {
+        <button class="audit-clear-btn" (click)="clearAll()"
+                [disabled]="clearing" matTooltip="Clear all entries (admin only)">
+          <mat-icon>delete_sweep</mat-icon>
+          Clear All
+        </button>
+      }
 
-  <!-- ── Table ────────────────────────────────────────────────────────────── -->
-  <div class="audit-table-wrap">
-    @if (auditLoading) {
-      <div class="audit-state">
-        <mat-spinner diameter="32"></mat-spinner>
-        <span>Loading audit logs…</span>
-      </div>
-    } @else if (auditError) {
-      <div class="audit-state audit-error">
-        <mat-icon>error_outline</mat-icon>
-        <span>{{ auditError }}</span>
-        <button class="audit-retry-btn" (click)="loadAuditLogs()">Retry</button>
-      </div>
-    } @else if (!filteredLogs.length) {
-      <div class="audit-state">
-        <mat-icon>history_toggle_off</mat-icon>
-        <span>No audit events found for the selected filters.</span>
-      </div>
-    } @else {
-      <table class="audit-table">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>User</th>
-            <th>Action</th>
-            <th>Resource</th>
-            <th>IP Address</th>
-            <th>Outcome</th>
-            <th>Details</th>
-            @if (auth.isAdmin()) { <th class="audit-th-del"></th> }
-          </tr>
-        </thead>
-        <tbody>
-          @for (log of filteredLogs; track log.id) {
-            <tr class="audit-row">
-              <td class="audit-time" [matTooltip]="formatTime(log.timestamp)">
-                {{ relativeTime(log.timestamp) }}
-              </td>
-              <td class="audit-user">
-                <mat-icon class="audit-user-icon">person</mat-icon>
-                {{ resolveUser(log) }}
-              </td>
-              <td class="audit-action">
-                <mat-icon class="audit-action-icon">{{ actionIcon(log.action) }}</mat-icon>
-                {{ actionLabel(log.action) }}
-              </td>
-              <td class="audit-resource" [title]="log.resource">{{ log.resource }}</td>
-              <td class="audit-ip">{{ log.ip_address ?? '—' }}</td>
-              <td>
-                <span [class]="outcomeClass(log.outcome)">
-                  <mat-icon>{{
-                    log.outcome === 'success' ? 'check_circle' :
-                    log.outcome === 'failure' ? 'cancel' : 'warning'
-                  }}</mat-icon>
-                  {{ log.outcome }}
-                </span>
-              </td>
-              <td class="audit-details" [title]="log.details ?? ''">
-                {{ log.details ?? '' }}
-              </td>
-              @if (auth.isAdmin()) {
-                <td class="audit-td-del">
-                  <button class="audit-del-btn"
-                          [disabled]="deletingId === log.id"
-                          (click)="deleteLog(log)"
-                          matTooltip="Delete entry">
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </td>
-              }
+      @if (auditTotal > 0) {
+        <span class="audit-count">{{ auditTotal }} events</span>
+      }
+    </div>
+
+    <!-- ── Table ───────────────────────────────────────────────────────── -->
+    <div class="audit-table-wrap">
+      @if (auditLoading) {
+        <div class="audit-state">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span>Loading audit logs…</span>
+        </div>
+      } @else if (auditError) {
+        <div class="audit-state audit-error">
+          <mat-icon>error_outline</mat-icon>
+          <span>{{ auditError }}</span>
+          <button class="audit-retry-btn" (click)="loadAuditLogs()">Retry</button>
+        </div>
+      } @else if (!filteredLogs.length) {
+        <div class="audit-state">
+          <mat-icon>history_toggle_off</mat-icon>
+          <span>No audit events found for the selected filters.</span>
+        </div>
+      } @else {
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Resource</th>
+              <th>IP Address</th>
+              <th>Outcome</th>
+              <th>Details</th>
+              @if (auth.isAdmin()) { <th class="audit-th-del"></th> }
             </tr>
-          }
-        </tbody>
-      </table>
-    }
-  </div>
+          </thead>
+          <tbody>
+            @for (log of filteredLogs; track log.id) {
+              <tr class="audit-row">
+                <td class="audit-time" [matTooltip]="formatTime(log.timestamp)">
+                  {{ relativeTime(log.timestamp) }}
+                </td>
+                <td class="audit-user">
+                  <mat-icon class="audit-user-icon">person</mat-icon>
+                  {{ resolveUser(log) }}
+                </td>
+                <td class="audit-action">
+                  <mat-icon class="audit-action-icon">{{ actionIcon(log.action) }}</mat-icon>
+                  {{ actionLabel(log.action) }}
+                </td>
+                <td class="audit-resource" [title]="log.resource">{{ log.resource }}</td>
+                <td class="audit-ip">{{ log.ip_address ?? '—' }}</td>
+                <td>
+                  <span [class]="outcomeClass(log.outcome)">
+                    <mat-icon>{{
+                      log.outcome === 'success' ? 'check_circle' :
+                      log.outcome === 'failure' ? 'cancel' : 'warning'
+                    }}</mat-icon>
+                    {{ log.outcome }}
+                  </span>
+                </td>
+                <td class="audit-details" [title]="log.details ?? ''">
+                  {{ log.details ?? '' }}
+                </td>
+                @if (auth.isAdmin()) {
+                  <td class="audit-td-del">
+                    <button class="audit-del-btn"
+                            [disabled]="deletingId === log.id"
+                            (click)="deleteLog(log)"
+                            matTooltip="Delete entry">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+  }
 
 </div>
 
@@ -199,11 +222,11 @@
   .audit-clear-btn {
     display: flex; align-items: center; gap: 4px;
     padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;
-    cursor: pointer; border: 1px solid #ef4444; background: transparent;
-    color: #ef4444; transition: all .15s;
+    cursor: pointer; border: 1px solid #A32D2D; background: transparent;
+    color: #A32D2D; transition: all .15s;
     mat-icon { font-size: 15px; width: 15px; height: 15px; }
   }
-  .audit-clear-btn:hover:not(:disabled) { background: #ef4444; color: #fff; }
+  .audit-clear-btn:hover:not(:disabled) { background: #FCEBEB; }
   .audit-clear-btn:disabled { opacity: .45; cursor: not-allowed; }
 
   .audit-th-del { width: 36px; }
@@ -212,10 +235,10 @@
   .audit-del-btn {
     display: flex; align-items: center; justify-content: center;
     width: 28px; height: 28px; border-radius: 4px; border: none;
-    background: transparent; cursor: pointer; color: var(--siem-muted);
+    background: transparent; cursor: pointer; color: #6b7280;
     transition: all .15s;
     mat-icon { font-size: 16px; width: 16px; height: 16px; }
   }
-  .audit-del-btn:hover:not(:disabled) { background: #fee2e2; color: #ef4444; }
+  .audit-del-btn:hover:not(:disabled) { background: #FCEBEB; color: #A32D2D; }
   .audit-del-btn:disabled { opacity: .35; cursor: not-allowed; }
 </style>

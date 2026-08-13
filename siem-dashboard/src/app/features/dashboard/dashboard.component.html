@@ -11,7 +11,7 @@
       <button class="filter-pill" [class.active]="range === '24h'" (click)="setRange('24h')">24h</button>
       <button class="filter-pill" [class.active]="range === '7d'"  (click)="setRange('7d')">7d</button>
       <button class="filter-pill" [class.active]="range === '30d'" (click)="setRange('30d')">30d</button>
-      <button class="filter-pill icon-btn" [class.spinning]="loading" (click)="load()" title="Refresh">
+      <button class="filter-pill icon-btn" [class.spinning]="loading || chartsLoading" (click)="load()" title="Refresh">
         <mat-icon>refresh</mat-icon>
       </button>
     </div>
@@ -101,7 +101,9 @@
           <mat-icon style="font-size:13px;width:13px;height:13px;color:#F46A1F">devices_other</mat-icon>
           By source
         </div>
-        @if (sourceItems.length === 0) {
+        @if (chartsLoading) {
+          <div class="empty-msg">Loading…</div>
+        } @else if (sourceItems.length === 0) {
           <div class="empty-msg">No data</div>
         } @else {
           @let srcSlices = getPieSlices(sourceItems);
@@ -138,7 +140,9 @@
           <mat-icon style="font-size:13px;width:13px;height:13px;color:#58a6ff">category</mat-icon>
           By category
         </div>
-        @if (categoryItems.length === 0) {
+        @if (chartsLoading) {
+          <div class="empty-msg">Loading…</div>
+        } @else if (categoryItems.length === 0) {
           <div class="empty-msg">No data</div>
         } @else {
           @let catSlices = getPieSlices(categoryItems);
@@ -175,7 +179,9 @@
           <mat-icon style="font-size:13px;width:13px;height:13px;color:#3fb950">computer</mat-icon>
           Top hosts
         </div>
-        @if (hostItems.length === 0) {
+        @if (chartsLoading) {
+          <div class="empty-msg">Loading…</div>
+        } @else if (hostItems.length === 0) {
           <div class="empty-msg">No host data</div>
         } @else {
           @let hostSlices = getPieSlices(hostItems);
@@ -212,7 +218,9 @@
           <mat-icon style="font-size:13px;width:13px;height:13px;color:#7F77DD">person</mat-icon>
           Top users
         </div>
-        @if (userItems.length === 0) {
+        @if (chartsLoading) {
+          <div class="empty-msg">Loading…</div>
+        } @else if (userItems.length === 0) {
           <div class="empty-msg">No user data</div>
         } @else {
           @let userSlices = getPieSlices(userItems);
@@ -258,7 +266,9 @@
 
       <!-- Alert rows -->
       <div class="alerts-feed">
-        @if (recentEvents.length === 0) {
+        @if (chartsLoading) {
+          <div class="empty-msg">Loading…</div>
+        } @else if (recentEvents.length === 0) {
           <div class="empty-msg">No alerts in this window</div>
         }
         @for (ev of recentEvents; track ev.event_id) {
@@ -440,7 +450,9 @@
 
         <!-- Recent sophos alerts -->
         <div class="alerts-feed">
-          @if (sophosEvents.length === 0) {
+          @if (chartsLoading) {
+            <div class="empty-msg">Loading…</div>
+          } @else if (sophosEvents.length === 0) {
             <div class="empty-msg">No sample data available</div>
           }
           @for (ev of sophosEvents; track ev.event_id) {
@@ -523,7 +535,9 @@
 
         <!-- Recent defender alerts -->
         <div class="alerts-feed">
-          @if (defenderEvents.length === 0) {
+          @if (chartsLoading) {
+            <div class="empty-msg">Loading…</div>
+          } @else if (defenderEvents.length === 0) {
             <div class="empty-msg">No sample data available</div>
           }
           @for (ev of defenderEvents; track ev.event_id) {
@@ -647,7 +661,9 @@
 
         <!-- Recent Darktrace model breaches -->
         <div class="alerts-feed">
-          @if (darktraceEvents.length === 0) {
+          @if (chartsLoading) {
+            <div class="empty-msg">Loading…</div>
+          } @else if (darktraceEvents.length === 0) {
             <div class="empty-msg">No sample data available</div>
           }
           @for (ev of darktraceEvents; track ev.event_id) {

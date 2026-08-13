@@ -13,7 +13,7 @@ export interface VulnSummary {
 }
 
 export interface VulnScanSummary {
-  id: string; scan_id: string; mfi: string; quarter: string; year: number;
+  id: string; scan_id: string; quarter: string; year: number;
   scan_type: 'internal' | 'external';
   branch?: string;
   storage_path?: string;
@@ -47,7 +47,7 @@ export interface VulnScan extends VulnScanSummary {
 }
 
 export interface VulnTrendPoint {
-  mfi: string; quarter: string; year: number;
+  quarter: string; year: number;
   scan_type: 'internal' | 'external'; summary: VulnSummary;
 }
 
@@ -57,7 +57,7 @@ export interface VulnUploadResult {
 }
 
 export interface ScanGroup {
-  mfi: string; year: number; quarter: string;
+  year: number; quarter: string;
   internal: VulnScanSummary[];
   external: VulnScanSummary[];
 }
@@ -71,25 +71,25 @@ export class NessusService {
   constructor(private api: ApiService, private http: HttpClient) {}
 
   private _uploadOne(
-    file: File, mfi: string, quarter: string,
+    file: File, quarter: string,
     year: number, scanType: 'internal' | 'external', branch?: string,
   ): Observable<VulnScanSummary> {
     const form = new FormData();
     form.append('file', file);
     let params = new HttpParams()
-      .set('mfi', mfi).set('quarter', quarter)
+      .set('quarter', quarter)
       .set('year', year.toString()).set('scan_type', scanType);
     if (branch) params = params.set('branch', branch);
     return this.http.post<VulnScanSummary>(`${this.base}/vuln/upload`, form, { params });
   }
 
   uploadScans(
-    files: File[], mfi: string, quarter: string,
+    files: File[], quarter: string,
     year: number, scanType: 'internal' | 'external', branch?: string,
   ): Observable<VulnUploadResult> {
     return from(files).pipe(
       concatMap(file =>
-        this._uploadOne(file, mfi, quarter, year, scanType, branch).pipe(
+        this._uploadOne(file, quarter, year, scanType, branch).pipe(
           map(scan  => ({ ok: scan,  filename: file.name, err: null  as string | null })),
           catchError(e => of({ ok: null as VulnScanSummary | null,
                                filename: file.name, err: this._errMsg(e) })),
@@ -103,10 +103,8 @@ export class NessusService {
     );
   }
 
-  listScans(mfi?: string): Observable<{ scans: VulnScanSummary[] }> {
-    const params: Record<string, string> = {};
-    if (mfi) params['mfi'] = mfi;
-    return this.api.get('/vuln/scans', params);
+  listScans(): Observable<{ scans: VulnScanSummary[] }> {
+    return this.api.get('/vuln/scans');
   }
 
   getScan(id: string): Observable<VulnScan> {
@@ -119,7 +117,7 @@ export class NessusService {
 
   updateScanMeta(
     id: string,
-    meta: Partial<Pick<VulnScanSummary, 'mfi' | 'branch' | 'quarter' | 'year' | 'scan_type'>>,
+    meta: Partial<Pick<VulnScanSummary, 'branch' | 'quarter' | 'year' | 'scan_type'>>,
   ): Observable<VulnScanSummary> {
     return this.api.patch(`/vuln/scans/${id}`, meta);
   }
@@ -128,20 +126,18 @@ export class NessusService {
     return this.api.get('/vuln/trends');
   }
 
-  reportUrl(mfi: string, year: number, quarter: string,
-            type: 'technical' | 'executive'): string {
+  reportUrl(year: number, quarter: string, type: 'technical' | 'executive'): string {
     const p = new HttpParams()
-      .set('mfi', mfi).set('year', year.toString()).set('quarter', quarter);
+      .set('year', year.toString()).set('quarter', quarter);
     return `${this.base}/vuln/report/${type}?${p.toString()}`;
   }
 
   static groupScans(scans: VulnScanSummary[]): ScanGroup[] {
     const map = new Map<string, ScanGroup>();
     for (const s of scans) {
-      const key = `${s.mfi}||${s.year}||${s.quarter}`;
+      const key = `${s.year}||${s.quarter}`;
       if (!map.has(key)) {
-        map.set(key, { mfi: s.mfi, year: s.year, quarter: s.quarter,
-                       internal: [], external: [] });
+        map.set(key, { year: s.year, quarter: s.quarter, internal: [], external: [] });
       }
       const grp = map.get(key)!;
       if (s.scan_type === 'external') grp.external.push(s);

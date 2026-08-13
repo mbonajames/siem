@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,9 +25,20 @@ export class ConnectorsComponent implements OnInit {
   connectors: ConnectorVM[] = [];
   categories: string[] = [];
 
-  constructor(private svc: ConnectorsService) {}
+  constructor(private svc: ConnectorsService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
+    this.load();
+  }
+
+  onReuse(): void {
+    if (!this.connectors.length || this.loading) {
+      this.load();
+    }
+  }
+
+  load(): void {
+    this.loading = true;
     this.svc.list().subscribe({
       next: list => {
         this.connectors = list.map(c => ({ ...c, testing: false, testDetail: '' }));
@@ -35,8 +46,9 @@ export class ConnectorsComponent implements OnInit {
           this.connectors.some(c => c.category === cat)
         );
         this.loading = false;
+        this.cdr.detectChanges();
       },
-      error: () => { this.loading = false; },
+      error: () => { this.loading = false; this.cdr.detectChanges(); },
     });
   }
 
@@ -57,11 +69,13 @@ export class ConnectorsComponent implements OnInit {
         c.testDetail = result.detail;
         c.testing    = false;
         c.last_checked = result.checked;
+        this.cdr.detectChanges();
       },
       error: () => {
         c.status     = 'disconnected';
         c.testDetail = 'Connection failed';
         c.testing    = false;
+        this.cdr.detectChanges();
       },
     });
   }

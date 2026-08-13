@@ -12,6 +12,10 @@ export interface GrafanaDashboard {
   folderUid?:   string;
   type:         string;
   isStarred?:   boolean;
+  // access-control fields injected by the SIEM backend
+  owner:        string | null;
+  shared_with:  string[];
+  accessible:   boolean;
 }
 
 export interface GrafanaFolder {
@@ -76,6 +80,14 @@ export class GrafanaService {
 
   deleteDashboard(uid: string): Observable<any> {
     return this.api.delete<any>(`/grafana/dashboards/${uid}`);
+  }
+
+  shareDashboard(uid: string, sharedWith: string[]): Observable<{ uid: string; owner: string; shared_with: string[] }> {
+    return this.api.patch<any>(`/grafana/dashboards/${uid}/share`, { shared_with: sharedWith });
+  }
+
+  listUsers(q: string): Observable<{ users: string[] }> {
+    return this.api.get<{ users: string[] }>('/users', q ? { q } : undefined);
   }
 
   provisionDatasources(): Observable<{ results: any[] }> {

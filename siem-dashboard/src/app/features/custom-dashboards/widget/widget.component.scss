@@ -64,7 +64,7 @@
   color: var(--siem-text-secondary); cursor: pointer; transition: background .12s, color .12s;
   mat-icon { font-size: 14px; width: 14px; height: 14px; }
   &:hover { background: var(--siem-surface); color: var(--siem-text-primary); }
-  &.wgt-btn-remove:hover { color: #f85149; background: rgba(218,54,51,.12); }
+  &.wgt-btn-remove:hover { color: #A32D2D; background: #FCEBEB; }
 }
 
 // ── Body ──────────────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@
 }
 
 .wgt-bar-track {
-  flex: 1; height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden;
+  flex: 1; height: 6px; background: rgba(26,58,92,.07); border-radius: 3px; overflow: hidden;
 }
 
 .wgt-bar-fill {
@@ -307,7 +307,7 @@
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 .wgt-ts-crosshair {
-  stroke: rgba(255,255,255,.20); stroke-width: 1; pointer-events: none;
+  stroke: rgba(26,58,92,.25); stroke-width: 1; pointer-events: none;
 }
 
 // ── Activity heatmap widget ────────────────────────────────────────────────
@@ -336,8 +336,8 @@
 }
 .wgt-heat-cell {
   width: 28px; height: 9px; border-radius: 2px;
-  background: rgba(255,255,255,.04); cursor: default; transition: filter .12s;
-  &:hover { filter: brightness(1.4); outline: 1px solid rgba(255,255,255,.25); }
+  background: rgba(26,58,92,.06); cursor: default; transition: filter .12s;
+  &:hover { filter: brightness(0.9); outline: 1px solid rgba(26,58,92,.25); }
 }
 
 .wgt-heat-leg-row {
