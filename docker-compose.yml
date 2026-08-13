@@ -10,6 +10,8 @@ services:
     volumes:
       - vuln_data:/app/vuln_data
       - ./siem-dashboard/src/assets/images:/app/assets/images:ro
+    extra_hosts:
+      - "armor.hope.local:192.168.47.178"
     networks:
       - siem-net
     # Port 8000 is NOT exposed externally — only reachable via the nginx proxy
