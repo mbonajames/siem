@@ -7,7 +7,7 @@
         <mat-icon>menu_book</mat-icon>
         Documentation
       </h1>
-      <p class="docs-subtitle">How Hope-Armor SIEM is put together, and where to find the official docs for each piece.</p>
+      <p class="docs-subtitle">Runbooks for how Hope-Armor SIEM is put together — install, configure, and troubleshoot each piece.</p>
     </div>
 
     <!-- Quick jump nav -->
@@ -32,10 +32,13 @@
         </div>
       </div>
 
-      <div class="tool-grid">
+      <div class="tool-list">
         @for (tool of section.tools; track tool.name) {
-          <article class="tool-card">
-            <div class="tool-card-top">
+          <article class="tool-card" [class.expanded]="isExpanded(tool.name)">
+
+            <!-- Header row — always visible, click to expand runbook -->
+            <div class="tool-card-top" (click)="tool.runbook && toggle(tool.name)"
+                 [class.clickable]="!!tool.runbook">
               <div class="tool-icon-wrap" [style.background]="tool.color + '18'" [style.border-color]="tool.color + '30'">
                 <mat-icon [style.color]="tool.color">{{ tool.icon }}</mat-icon>
               </div>
@@ -46,9 +49,25 @@
                   {{ tool.status === 'live' ? 'Live in this deployment' : 'Planned — not yet configured' }}
                 </span>
               </div>
+              @if (tool.runbook) {
+                <button class="expand-btn" [matTooltip]="isExpanded(tool.name) ? 'Collapse' : 'Show install / config / troubleshooting guide'">
+                  <mat-icon>{{ isExpanded(tool.name) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                </button>
+              }
             </div>
 
-            <p class="tool-context">{{ tool.context }}</p>
+            <p class="tool-overview">{{ tool.overview }}</p>
+
+            @if (tool.keyPaths?.length) {
+              <div class="key-paths">
+                @for (kp of tool.keyPaths; track kp.path) {
+                  <div class="key-path-row">
+                    <span class="key-path-label">{{ kp.label }}</span>
+                    <code class="key-path-value">{{ kp.path }}</code>
+                  </div>
+                }
+              </div>
+            }
 
             @if (tool.screenshot) {
               <div class="shot">
@@ -60,10 +79,34 @@
               </div>
             }
 
+            <!-- Runbook — expandable -->
+            @if (tool.runbook && isExpanded(tool.name)) {
+              <div class="runbook">
+                @for (block of tool.runbook; track block.heading) {
+                  <div class="runbook-block">
+                    <h3 class="runbook-heading">{{ block.heading }}</h3>
+                    <ol class="runbook-steps">
+                      @for (step of block.steps; track step.text) {
+                        <li>
+                          <span>{{ step.text }}</span>
+                          @if (step.code) {
+                            <div class="code-block">
+                              <button class="copy-btn" (click)="copyCode(step.code, $event)">Copy</button>
+                              <pre><code>{{ step.code }}</code></pre>
+                            </div>
+                          }
+                        </li>
+                      }
+                    </ol>
+                  </div>
+                }
+              </div>
+            }
+
             @if (tool.docsUrl) {
-              <a class="docs-link" [href]="tool.docsUrl" target="_blank" rel="noopener noreferrer">
+              <a class="docs-link" [href]="tool.docsUrl" target="_blank" rel="noopener noreferrer" (click)="$event.stopPropagation()">
                 <mat-icon>open_in_new</mat-icon>
-                {{ tool.docsLabel ?? 'Official Docs' }}
+                {{ tool.docsLabel ?? 'Official Docs' }} — for reference
               </a>
             }
           </article>
