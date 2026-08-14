@@ -35,27 +35,20 @@ const SECTIONS: DocSection[] = [
     tools: [
       {
         name: 'Darktrace', icon: 'bubble_chart', color: '#60a5fa', status: 'live',
-        overview: 'Network anomaly detection — a physical appliance (or virtual vSensor) passively analyzes mirrored network traffic and flags anomalous behavior with unsupervised machine learning. No agent is needed on most devices; alerts land in our pipeline as Network Security events.',
+        overview: 'Network anomaly detection. Hope-Armor has no direct Darktrace API integration — Darktrace forwards its alerts to the Wazuh manager, which tags them with rule.groups: darktrace, and our API Gateway simply queries OpenSearch for that tag.',
+        keyPaths: [
+          { label: 'Env vars needed (Armor)', path: 'None — reuses WAZUH_INDEXER_URL / _USER / _PASSWORD' },
+          { label: 'API Gateway endpoints', path: 'GET /darktrace/alerts/, /darktrace/summary-statistics/, /darktrace/devices/  (main.py)' },
+          { label: 'OpenSearch filter used', path: '{"term": {"rule.groups": "darktrace"}}' },
+          { label: 'Grafana datasource / index', path: 'darktrace-agemail → index "darktrace-index_deflector"' },
+        ],
         runbook: [
           {
-            heading: 'How traffic actually reaches it',
+            heading: 'How this is actually wired up in Armor',
             steps: [
-              { text: 'Physical appliance: traffic is fed to it via a SPAN/mirror port configured on your core switch — Darktrace itself never touches the switch config.' },
-              { text: 'Virtual environments: a Darktrace vSensor ingests mirrored VPC / virtual-switch traffic instead, then forwards extracted metadata to the master appliance.' },
-              { text: 'Devices that can\u2019t be mirrored directly (printers, some IoT, videoconferencing units) can instead run a lightweight osSensor agent that forwards to a vSensor.' },
-            ],
-          },
-          {
-            heading: 'Where to investigate an alert',
-            steps: [
-              { text: 'All investigation happens in the Threat Visualizer (the 3D network view). Flagged anomalies show up there as "model breaches" — that\u2019s where you drill into the actual traffic/behavior that triggered one.' },
-            ],
-          },
-          {
-            heading: 'Troubleshooting: a network segment shows no traffic',
-            steps: [
-              { text: 'Confirm the relevant vSensor is actually listed and reporting under System Config \u2192 Probes in the Threat Visualizer. If it\u2019s missing or shows stale, the mirror/SPAN port config on the switch side is the usual culprit, not Darktrace itself.' },
-              { text: 'For virtual/cloud deployments, double-check the traffic-mirroring session (VPC mirroring / vSwitch port mirroring) is actually forwarding to the vSensor\u2019s listening interface.' },
+              { text: 'There’s no Darktrace client code in the API Gateway (no client_id/secret, no polling job). All Darktrace data already lives in OpenSearch by the time our backend touches it — Wazuh is the ingestion path.' },
+              { text: 'Severity is read differently for Darktrace than everything else: every Darktrace-sourced Wazuh rule fires at rule.level=3 regardless of real severity, so main.py reads the actual severity from data.model.category instead of rule.level for these alerts (see build_alert_query in main.py).' },
+              { text: 'If Darktrace events stop showing up on the Network Security tab, the fault is almost never Angular/FastAPI — check that events are still landing in the darktrace-index_deflector index in OpenSearch first (e.g. via Grafana’s Explore view on the darktrace-agemail datasource, or directly against the indexer).' },
             ],
           },
         ],
@@ -64,26 +57,26 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: 'Sophos Central', icon: 'security', color: '#3fb950', status: 'live',
-        overview: 'Endpoint protection console — cloud-hosted, so there\u2019s no server to install. What actually gets installed is the Sophos agent on each protected endpoint. Alerts and device health feed the Endpoint Security tab, and analysts can isolate a device directly from Hope-Armor.',
+        overview: 'Endpoint protection. The API Gateway talks to Sophos Central directly via OAuth2 to list devices, pull alerts, and trigger isolation from the Endpoint Security tab.',
         keyPaths: [
-          { label: 'Windows agent logs', path: 'C:\\ProgramData\\Sophos\\Endpoint Defense\\Logs\\' },
-          { label: 'Linux agent logs',   path: '/opt/sophos-spl/plugins/av/log/av.log' },
-          { label: 'Linux install dir',  path: '/opt/sophos-spl' },
+          { label: 'Env vars (APIGateway/.env)', path: 'SOPHOS_CLIENT_ID, SOPHOS_CLIENT_SECRET' },
+          { label: 'Client implementation', path: 'client.py → class SophosCentralClient' },
         ],
         runbook: [
           {
-            heading: 'Installing the endpoint agent',
+            heading: 'Auth flow this app actually performs',
             steps: [
-              { text: 'Windows / macOS: Sophos Central \u2192 My Devices \u2192 Protect Devices, download the customer-specific installer (it comes pre-bundled with your registration token), then run it on the endpoint.' },
-              { text: 'Linux: Sophos Central \u2192 My Environment \u2192 Installers \u2192 download the Linux Server Installer, then on the target host:', code: 'wget <installer-download-link>\nchmod +x SophosSetup.sh\nsudo ./SophosSetup.sh' },
+              { text: 'On startup, SophosCentralClient runs a 3-step handshake required by Sophos’s API:' },
+              { text: '1. POST client_id/client_secret (client_credentials grant) to id.sophos.com → bearer access token.', code: 'POST https://id.sophos.com/api/v2/oauth2/token' },
+              { text: '2. GET whoami with that token → returns your tenant ID and the correct regional API base URL (Sophos routes tenants to different regions).', code: 'GET https://api.central.sophos.com/whoami/v1' },
+              { text: '3. Every subsequent call uses that regional base URL plus an X-Tenant-ID header — the client refreshes the token itself 60 seconds before it expires.' },
             ],
           },
           {
-            heading: 'Troubleshooting: agent not reporting, or can\u2019t uninstall',
+            heading: 'If it stops working',
             steps: [
-              { text: 'Check the endpoint is actually shown online in Sophos Central \u2192 Devices \u2014 a device that hasn\u2019t checked in recently usually means a network/proxy problem on that host, not a Sophos problem.' },
-              { text: 'Check the agent log at the path for that OS above for the actual error.' },
-              { text: 'If uninstall/reconfigure is blocked by Tamper Protection, turn Tamper Protection off first from Sophos Central \u2192 the device\u2019s page (an admin can also generate a one-time bypass). Don\u2019t try to force-kill the agent process \u2014 it\u2019s designed to resist exactly that.' },
+              { text: 'Test it live from the Connectors tab first — it calls the same client and will surface the actual HTTP error from Sophos rather than a generic failure.' },
+              { text: 'A 401 at step 1 means the client ID/secret in .env is wrong or the API credential was revoked in Sophos Central; a failure at whoami with a valid token usually means the credential was created in the wrong Sophos Central region/tenant.' },
             ],
           },
         ],
@@ -92,7 +85,13 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: 'Microsoft Defender', icon: 'verified_user', color: '#0078d4', status: 'live',
-        overview: 'Defender for Endpoint (device alerts) and Defender for Office 365 (email threats), pulled in via Microsoft Graph API. Powers the Email Security tab and contributes to Endpoint Security.',
+        overview: 'Defender for Endpoint and Defender for Office 365, pulled in via Microsoft Graph API by a background poller — this is the same Azure app registration used for Entra ID below.',
+        keyPaths: [
+          { label: 'Env vars (APIGateway/.env)', path: 'AZURE_TENANT_ID, DEFENDER_CLIENT_ID, DEFENDER_CLIENT_SECRET' },
+          { label: 'Optional tuning', path: 'DEFENDER_POLL_SECS (default 300), DEFENDER_LOOKBACK_HOURS (default 24)' },
+          { label: 'Client implementation', path: 'integrations/ms_defender.py → class DefenderClient' },
+          { label: 'Destination index', path: 'siem-defender-* (feeds Endpoint Security and Email Security tabs)' },
+        ],
         docsUrl: 'https://learn.microsoft.com/en-us/defender-endpoint/', docsLabel: 'Official Docs',
         screenshot: 'defender-incidents.png',
       },
@@ -109,6 +108,8 @@ const SECTIONS: DocSection[] = [
           { label: 'Manager log (ossec.log)', path: '/var/ossec/logs/ossec.log' },
           { label: 'Custom rules (edit this)', path: '/var/ossec/etc/rules/local_rules.xml' },
           { label: 'Built-in rules (read-only)', path: '/var/ossec/ruleset/rules/' },
+          { label: 'Custom decoders (edit this)', path: '/var/ossec/etc/decoders/local_decoder.xml' },
+          { label: 'Built-in decoders (read-only)', path: '/var/ossec/ruleset/decoders/' },
           { label: 'Main config', path: '/var/ossec/etc/ossec.conf' },
         ],
         runbook: [
@@ -118,26 +119,54 @@ const SECTIONS: DocSection[] = [
               { text: 'Download the official installation assistant:', code: 'curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh' },
               { text: 'Single all-in-one node (indexer + manager + dashboard together):', code: 'bash wazuh-install.sh -a' },
               { text: 'Or, for a multi-node/production deployment, install each component on its own target host instead:', code: 'bash wazuh-install.sh --wazuh-indexer <node-name>\nbash wazuh-install.sh --wazuh-server <node-name>\nbash wazuh-install.sh --wazuh-dashboard <node-name>' },
-              { text: 'The installer prints the auto-generated admin password at the very end \u2014 save it immediately, it is not shown again.' },
+              { text: 'The installer prints the auto-generated admin password at the very end — save it immediately, it is not shown again.' },
+            ],
+          },
+          {
+            heading: 'How log normalization actually works, end to end',
+            steps: [
+              { text: 'A raw log line arrives (from an agent, syslog, or a forwarded source like Darktrace) with whatever format its source uses.' },
+              { text: 'Decoders run first: they extract meaningful fields (srcip, user, dstport, action, etc.) out of that raw text into a common, structured set of fields — this is the "normalization" step. Two completely different log formats that both produce a srcip field can then be treated identically by rules.' },
+              { text: 'Rules then match against those normalized fields (not the raw text) to decide severity, description, and MITRE ATT&CK mapping.' },
+              { text: 'The result — raw log plus extracted fields plus the matched rule— is what actually gets written to the wazuh-alerts-* index that Grafana and this dashboard both read from.' },
+              { text: 'Practical implication: if a new log source shows up with no useful fields on its alerts, the fix is almost always a missing/incorrect decoder, not a rule problem.' },
+            ],
+          },
+          {
+            heading: 'Writing custom decoders',
+            steps: [
+              { text: 'Add new decoders to local_decoder.xml, never edit the built-in ruleset directly. A decoder needs a prematch (or program_name) to identify which logs it applies to, then a child decoder with a regex plus an order attribute naming the fields each capture group extracts, e.g.:', code: '<decoder name="myapp">\n  <prematch>^MyApp: </prematch>\n</decoder>\n\n<decoder name="myapp-fields">\n  <parent>myapp</parent>\n  <regex>^user (\\S+) from (\\S+)$</regex>\n  <order>user, srcip</order>\n</decoder>' },
+              { text: 'order must list exactly one field name per capturing group in the regex, in the same order the groups appear.' },
+              { text: 'Test against a real sample log line before trusting it in production:', code: '/var/ossec/bin/wazuh-logtest' },
+              { text: 'Restart to load it:', code: 'systemctl restart wazuh-manager' },
             ],
           },
           {
             heading: 'Configuring detection rules',
             steps: [
-              { text: 'Never edit the built-in rule files directly \u2014 override or extend via local_rules.xml instead.' },
-              { text: 'Custom rule IDs must start at 100000 or higher; Wazuh reserves 0\u201399999 for built-in rules.' },
+              { text: 'Never edit the built-in rule files directly — override or extend via local_rules.xml instead.' },
+              { text: 'Custom rule IDs must start at 100000 or higher; Wazuh reserves 0–99999 for built-in rules.' },
               { text: 'After editing, test the rule/decoder logic against a sample log line before relying on it:', code: '/var/ossec/bin/wazuh-logtest' },
               { text: 'Reload the ruleset:', code: 'systemctl restart wazuh-manager' },
+            ],
+          },
+          {
+            heading: 'Correlation rules (multiple events → one alert)',
+            steps: [
+              { text: 'Correlation is built on top of ordinary rules using if_matched_sid (or if_matched_group) plus frequency and timeframe: the parent rule fires only once its child rule has matched frequency times within timeframe seconds.' },
+              { text: 'Example — alert on repeated auth failures from the same source within 2 minutes (a brute-force pattern), grouped per source IP so unrelated hosts don’t get counted together:', code: '<rule id="100010" level="10" frequency="8" timeframe="120">\n  <if_matched_sid>5716</if_matched_sid>\n  <same_source_ip />\n  <description>Multiple authentication failures from the same source in 2 minutes — possible brute force</description>\n</rule>' },
+              { text: 'same_source_ip / same_user / same_field ensure the count is per-attacker or per-account instead of across totally unrelated events — always add one of these on a correlation rule unless you deliberately want a global count.' },
+              { text: 'Correlation rules live in the same local_rules.xml file and follow the same 100000+ ID rule and wazuh-logtest / restart workflow as above.' },
             ],
           },
           {
             heading: 'Troubleshooting: manager fails to (re)start',
             steps: [
               { text: 'Check the service status and the system journal first:', code: 'systemctl status wazuh-manager.service\njournalctl -xe -u wazuh-manager' },
-              { text: 'Read the manager\u2019s own log \u2014 this is almost always where the real error is:', code: 'tail -n 100 /var/ossec/logs/ossec.log' },
-              { text: 'Common cause #1 \u2014 a config syntax error in ossec.conf. Fix the exact line the log points to.' },
-              { text: 'Common cause #2 \u2014 a corrupted internal database socket:', code: 'sudo systemctl stop wazuh-manager\nsudo rm /var/ossec/queue/db/wdb\nsudo chown wazuh:wazuh /var/ossec/queue/db\nsudo chmod 750 /var/ossec/queue/db\nsudo systemctl start wazuh-manager' },
-              { text: 'Common cause #3 \u2014 wrong file ownership under /var/ossec/. Everything there must be owned by the wazuh user, not root.' },
+              { text: 'Read the manager’s own log — this is almost always where the real error is:', code: 'tail -n 100 /var/ossec/logs/ossec.log' },
+              { text: 'Common cause #1 — a config syntax error in ossec.conf (or a malformed local_rules.xml / local_decoder.xml). Fix the exact line the log points to.' },
+              { text: 'Common cause #2 — a corrupted internal database socket:', code: 'sudo systemctl stop wazuh-manager\nsudo rm /var/ossec/queue/db/wdb\nsudo chown wazuh:wazuh /var/ossec/queue/db\nsudo chmod 750 /var/ossec/queue/db\nsudo systemctl start wazuh-manager' },
+              { text: 'Common cause #3 — wrong file ownership under /var/ossec/. Everything there must be owned by the wazuh user, not root.' },
             ],
           },
         ],
@@ -157,13 +186,30 @@ const SECTIONS: DocSection[] = [
     tools: [
       {
         name: 'VirusTotal', icon: 'gpp_bad', color: '#ef4444', status: 'live',
-        overview: 'On-demand reputation lookups for IPs, domains, URLs, and file hashes — used during alert investigation and email threat triage.',
+        overview: 'On-demand reputation lookups — called live during investigation, not part of any ingestion pipeline. No polling job and nothing gets stored ahead of time; a lookup only happens when an analyst asks for one.',
+        keyPaths: [
+          { label: 'Env vars (APIGateway/.env)', path: 'VT_API_KEY  (optional: VT_TIMEOUT, default 15s)' },
+          { label: 'Implementation', path: 'integrations/virustotal.py → lookup_ip / lookup_domain / lookup_url / lookup_hash' },
+        ],
         docsUrl: 'https://docs.virustotal.com/', docsLabel: 'Official Docs',
         screenshot: 'virustotal-lookup.png',
       },
       {
         name: 'MISP', icon: 'account_tree', color: '#c026d3', status: 'live',
-        overview: 'Runs as a Wazuh-side enrichment integration (custom-misp) — every matching Wazuh alert is automatically checked against our MISP instance for known indicators of compromise before it reaches the dashboard.',
+        overview: 'Runs entirely on the Wazuh manager side, not in this API Gateway — there is no MISP env var or client code in Armor at all.',
+        keyPaths: [
+          { label: 'Env vars (APIGateway/.env)', path: 'None — configure directly on the Wazuh manager, not here' },
+          { label: 'Integration script', path: '/var/ossec/integrations/custom-misp and custom-misp.py on the Wazuh manager' },
+        ],
+        runbook: [
+          {
+            heading: 'How this is actually wired up',
+            steps: [
+              { text: 'Wazuh calls custom-misp for every matching alert, which extracts IOCs from that alert and queries your MISP instance, then writes the results back onto the alert under a top-level misp key — that enriched alert is what eventually lands in OpenSearch.' },
+              { text: 'To change MISP behavior (which rule groups trigger a lookup, the MISP URL/API key it queries), edit the integration config on the Wazuh manager itself (typically wired up under /etc/systemd/system/wazuh-manager.service.d/misp.conf) — this app has nothing to configure for it.' },
+            ],
+          },
+        ],
         docsUrl: 'https://www.misp-project.org/documentation/', docsLabel: 'Official Docs',
       },
     ],
@@ -175,6 +221,10 @@ const SECTIONS: DocSection[] = [
       {
         name: 'Nessus / Tenable', icon: 'radar', color: '#a78bfa', status: 'live',
         overview: 'Scheduled and on-demand vulnerability scans. Results, executive summaries, and technical reports are available on the Vulnerability Detection tab.',
+        keyPaths: [
+          { label: 'Env vars (APIGateway/.env)', path: 'NESSUS_URL (defaults to https://localhost:8834), NESSUS_ACCESS_KEY, NESSUS_SECRET_KEY' },
+          { label: 'Implementation', path: 'client.py → class NessusClient' },
+        ],
         docsUrl: 'https://docs.tenable.com/nessus/', docsLabel: 'Official Docs',
         screenshot: 'nessus-scan-results.png',
       },
@@ -186,7 +236,7 @@ const SECTIONS: DocSection[] = [
     tools: [
       {
         name: 'Microsoft Entra ID', icon: 'manage_accounts', color: '#0ea5e9', status: 'live',
-        overview: 'Azure AD identity protection — risky sign-ins and risky users surface on the Identity Management tab.',
+        overview: 'Azure AD identity protection — risky sign-ins and risky users surface on the Identity Management tab. There is no separate Entra credential: this reuses the exact same Graph API app registration (DEFENDER_CLIENT_ID / DEFENDER_CLIENT_SECRET) as Microsoft Defender above, just against different Graph scopes/endpoints.',
         docsUrl: 'https://learn.microsoft.com/en-us/entra/id-protection/', docsLabel: 'Official Docs',
         screenshot: 'entra-id-protection.png',
       },
@@ -211,32 +261,15 @@ const SECTIONS: DocSection[] = [
         name: 'Grafana', icon: 'bar_chart', color: '#f97316', status: 'live',
         overview: 'Dashboarding layer on top of our OpenSearch data. Build and share custom dashboards from the Visualizations tab; provisioned datasources point at the same indices Wazuh writes to.',
         keyPaths: [
-          { label: 'Config file', path: '/etc/grafana/grafana.ini' },
-          { label: 'Log (Linux package install)', path: '/var/log/grafana/grafana.log' },
-          { label: 'Log (manual/Windows install)', path: '<install_dir>/data/log/grafana.log' },
+          { label: 'Env vars (APIGateway/.env)', path: 'GRAFANA_URL, GRAFANA_API_KEY, GRAFANA_PUBLIC_URL' },
         ],
         runbook: [
           {
-            heading: 'Installation (Linux, Debian/Ubuntu)',
+            heading: 'The three datasources this app provisions',
             steps: [
-              { text: 'Add the official Grafana APT repository and install:', code: 'sudo apt-get install -y software-properties-common\nsudo add-apt-repository "deb https://apt.grafana.com stable main"\nwget -q -O - https://apt.grafana.com/gpg.key | sudo apt-key add -\nsudo apt-get update\nsudo apt-get install grafana' },
-              { text: 'Enable and start it:', code: 'sudo systemctl enable grafana-server\nsudo systemctl start grafana-server' },
-              { text: 'Windows: download the installer/zip from the Grafana downloads page and run it directly — no package manager step needed.' },
-            ],
-          },
-          {
-            heading: 'Configuring datasources for Hope-Armor',
-            steps: [
-              { text: 'Don\u2019t hand-configure the OpenSearch datasources in Grafana\u2019s own UI. Use the "Provision Data Sources" button on the Visualizations tab instead — it calls the Armor API Gateway, which provisions all three (wazuh-alerts, siem-defender, darktrace-agemail) with the correct TLS-skip settings automatically.' },
-            ],
-          },
-          {
-            heading: 'Troubleshooting',
-            steps: [
-              { text: 'Check the service:', code: 'sudo systemctl status grafana-server' },
-              { text: 'Check the log at the path above for the actual error.' },
-              { text: 'For a deeper look, set level = debug under the [log] section in grafana.ini, restart, then revert it afterward — debug logging is very verbose.' },
-              { text: 'If a dashboard panel loads but shows "no data", check the datasource itself first: Connections \u2192 Data sources \u2192 the OpenSearch source \u2192 Save & Test.' },
+              { text: 'The "Provision Data Sources" button on the Visualizations tab calls POST /grafana/datasources/provision on the API Gateway, which creates or updates exactly these three OpenSearch datasources in Grafana with tlsSkipVerify=true (our indexer uses a self-signed cert):', code: 'wazuh-alerts       → index "wazuh-alerts-4.x-*"\nsiem-defender      → index "siem-defender-*"\ndarktrace-agemail  → index "darktrace-index_deflector"' },
+              { text: 'All three point at the same WAZUH_INDEXER_URL — Grafana never talks to Sophos, Defender, or Darktrace directly, only to the one OpenSearch cluster everything already lands in.' },
+              { text: 'Re-running the provision button is safe — existing datasources with the same name are updated in place (PATCH), not duplicated.' },
             ],
           },
         ],
@@ -256,12 +289,21 @@ const SECTIONS: DocSection[] = [
       {
         name: 'Jira', icon: 'confirmation_number', color: '#818cf8', status: 'live',
         overview: 'Security incident ticketing. Alerts can be escalated directly to a Jira ticket from the Alerts Investigation tab.',
+        keyPaths: [
+          { label: 'Env vars (APIGateway/.env)', path: 'JIRA_BASE_URL, JIRA_PROJECT_KEY, JIRA_EMAIL, JIRA_API_TOKEN' },
+          { label: 'Implementation', path: 'client.py → class JiraClient' },
+        ],
         docsUrl: 'https://support.atlassian.com/jira-software-cloud/', docsLabel: 'Official Docs',
         screenshot: 'jira-ticket.png',
       },
       {
         name: 'Microsoft Teams', icon: 'forum', color: '#6264A7', status: 'live',
-        overview: 'Critical/high-severity alerts are pushed to a Teams channel via webhook. Configure the webhook URL and severity threshold on the Settings tab.',
+        overview: 'Critical/high-severity alerts are pushed to a Teams channel via webhook by a background poller.',
+        keyPaths: [
+          { label: 'Configured via', path: 'Settings tab (stored config) — falls back to env var TEAMS_WEBHOOK_URL if not set there' },
+          { label: 'Default poll interval', path: '300 seconds (poll_interval_secs, editable on the Settings tab)' },
+          { label: 'Implementation', path: 'routers/notifications.py' },
+        ],
         docsUrl: 'https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors',
         docsLabel: 'Official Docs',
       },
