@@ -24,7 +24,9 @@ const PAGE_TITLES: Record<string, { title: string; icon: string }> = {
   '/jira':             { title: 'Cases',                   icon: 'confirmation_number'      },
   '/connectors':       { title: 'Connectors',              icon: 'cable'                    },
   '/discover':         { title: 'Explore',                 icon: 'travel_explore'           },
-  '/settings':         { title: 'Recent Activities',       icon: 'history'                  },
+  '/settings':         { title: 'Settings',                icon: 'settings'                 },
+  '/activity-log':     { title: 'Recent Activities',       icon: 'history'                  },
+  '/docs':             { title: 'Documentation',           icon: 'menu_book'                },
 };
 
 @Component({

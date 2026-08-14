@@ -31,6 +31,7 @@ export class SidebarComponent {
     { path: '/nessus',           icon: 'radar',                label: 'Vulnerability Detection' },
     { path: '/jira',             icon: 'confirmation_number',  label: 'Cases'                   },
     { path: '/activity-log',      icon: 'history',              label: 'Recent Activities'       },
+    { path: '/docs',             icon: 'menu_book',            label: 'Documentation'           },
     { path: '/settings',         icon: 'settings',             label: 'Settings'                },
   ];
 }

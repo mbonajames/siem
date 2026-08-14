@@ -1,0 +1,75 @@
+<div class="docs-page">
+
+  <!-- ── Page header ────────────────────────────────────────────────────────── -->
+  <div class="docs-header">
+    <div class="docs-header-left">
+      <h1 class="docs-title">
+        <mat-icon>menu_book</mat-icon>
+        Documentation
+      </h1>
+      <p class="docs-subtitle">How Hope-Armor SIEM is put together, and where to find the official docs for each piece.</p>
+    </div>
+
+    <!-- Quick jump nav -->
+    <nav class="docs-jumpnav" aria-label="Jump to section">
+      @for (s of sections; track s.id) {
+        <a [href]="'#' + s.id" class="jump-link">
+          <mat-icon>{{ s.icon }}</mat-icon>
+          {{ s.title }}
+        </a>
+      }
+    </nav>
+  </div>
+
+  <!-- ── Sections ───────────────────────────────────────────────────────────── -->
+  @for (section of sections; track section.id) {
+    <section class="docs-section" [id]="section.id">
+      <div class="section-head">
+        <mat-icon class="section-icon">{{ section.icon }}</mat-icon>
+        <div>
+          <h2 class="section-title">{{ section.title }}</h2>
+          <p class="section-desc">{{ section.description }}</p>
+        </div>
+      </div>
+
+      <div class="tool-grid">
+        @for (tool of section.tools; track tool.name) {
+          <article class="tool-card">
+            <div class="tool-card-top">
+              <div class="tool-icon-wrap" [style.background]="tool.color + '18'" [style.border-color]="tool.color + '30'">
+                <mat-icon [style.color]="tool.color">{{ tool.icon }}</mat-icon>
+              </div>
+              <div class="tool-name-wrap">
+                <span class="tool-name">{{ tool.name }}</span>
+                <span class="tool-status" [class.planned]="tool.status === 'planned'">
+                  <span class="status-dot"></span>
+                  {{ tool.status === 'live' ? 'Live in this deployment' : 'Planned — not yet configured' }}
+                </span>
+              </div>
+            </div>
+
+            <p class="tool-context">{{ tool.context }}</p>
+
+            @if (tool.screenshot) {
+              <div class="shot">
+                <img [src]="'/docs/' + tool.screenshot" [alt]="tool.name + ' screenshot'" (error)="onImgError($event)">
+                <div class="shot-placeholder">
+                  <mat-icon>image</mat-icon>
+                  <span>Drop a screenshot at <code>public/docs/{{ tool.screenshot }}</code> to show it here</span>
+                </div>
+              </div>
+            }
+
+            @if (tool.docsUrl) {
+              <a class="docs-link" [href]="tool.docsUrl" target="_blank" rel="noopener noreferrer">
+                <mat-icon>open_in_new</mat-icon>
+                {{ tool.docsLabel ?? 'Official Docs' }}
+              </a>
+            }
+          </article>
+        }
+      </div>
+    </section>
+  }
+
+</div>

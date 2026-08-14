@@ -26,6 +26,7 @@ export const routes: Routes = [
       { path: 'discover',          loadComponent: () => import('./features/discover/discover.component').then(m => m.DiscoverComponent) },
       { path: 'settings',          data: { isSettingsView: true },  loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent) },
       { path: 'activity-log',      data: { isSettingsView: false }, loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent) },
+      { path: 'docs',              loadComponent: () => import('./features/docs/docs.component').then(m => m.DocsComponent) },
       { path: '**', redirectTo: 'dashboard' },
     ],
   },
