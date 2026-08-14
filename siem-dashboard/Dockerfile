@@ -10,7 +10,7 @@ RUN npm run build -- --configuration production
 
 # ── Stage 2: Serve with Nginx ─────────────────────────────────────────────────
 
-FROM nginx:1.27-alpine
+FROM nginx:1.29-alpine
 
 # Angular 18 (new esbuild builder) puts browser assets in dist/.../browser/
 COPY --from=builder /app/dist/siem-dashboard/browser /usr/share/nginx/html
