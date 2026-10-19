@@ -106,9 +106,8 @@ class Normalizer:
             model_name = (data.get("model") or {}).get("name")
             if model_name:
                 return model_name
-        if src.get("data", {}).get("integration") == "ms-defender":
-            return src.get("data", {}).get("defender", {}).get("title") \
-                or src.get("rule", {}).get("description", "No description")
+        if src.get("data", {}).get("integration") == "ms-graph":
+            return src.get("data", {}).get("ms-graph", {}).get("description")
         return src.get("rule", {}).get("description", "No description")
 
 
